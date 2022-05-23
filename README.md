@@ -11,3 +11,9 @@ A Google Chrome extension that sorts your tabs using a custom value in each tab 
 
 ## Rationale
 When I'm searching for something (e.g. something to read, something to buy), I usually open a ton of tabs and then manually sort them by their rating to see which ones are the best. This extension was just to automate that process because it was starting to become a pain when I would open 30+ tabs...
+
+
+## TODO
+- [ ] Show information about how many tabs were found and sorted
+- [ ] Show information about how many tabs matched the search but were unloaded
+- [ ] Add custom code for post-processing selector value string (e.g. for formatting)

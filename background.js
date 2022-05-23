@@ -6,7 +6,7 @@ function extract(selector, isNumber) {
 async function sortTabs({ urlRegex: urlRegexStr, valueSelector, sortByNumber, descendingSort }) {
     // Find the tabs we care about based on the regex
     const urlRegex = new RegExp(urlRegexStr);
-    const allWindowTabs = await chrome.tabs.query({ currentWindow: true });
+    const allWindowTabs = await chrome.tabs.query({ currentWindow: true, status: "complete" });
     const tabsOfInterest = allWindowTabs
         .filter(tab => urlRegex.test(tab.url))
         .map(({ id, url }) => { return { id, url }; });
