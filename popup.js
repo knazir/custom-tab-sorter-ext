@@ -1,9 +1,9 @@
 /***** Form Setup *****/
 
-const urlRegexInput = setupInputListener("urlRegex", "", false);
-const valueSelectorInput = setupInputListener("valueSelector", "", false);
-const sortByNumberCheckbox = setupInputListener("sortByNumber", true, true);
-const descendingSortCheckbox = setupInputListener("descendingSort", false, true);
+const urlRegexInput = setupInputListener("urlRegex", "");
+const valueSelectorInput = setupInputListener("valueSelector", "");
+const sortByNumberCheckbox = setupInputListener("sortByNumber", true);
+const descendingSortCheckbox = setupInputListener("descendingSort", false);
 
 const sortButton = document.querySelector("#sortButton");
 sortButton.addEventListener("click", () => {
@@ -35,7 +35,8 @@ function setLocalStorage(args) {
     }
 }
 
-function setupInputListener(key, defaultValue, isCheckbox) {
+function setupInputListener(key, defaultValue) {
+    const isCheckbox = typeof defaultValue === "boolean";
     const input = document.querySelector(`#${key}`);
     
     let storedValue = getLocalStorage({ [key]: defaultValue })[key];

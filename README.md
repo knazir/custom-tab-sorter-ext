@@ -14,6 +14,8 @@ When I'm searching for something (e.g. something to read, something to buy), I u
 
 
 ## TODO
-- [ ] Show information about how many tabs were found and sorted
-- [ ] Show information about how many tabs matched the search but were unloaded
-- [ ] Add custom code for post-processing selector value string (e.g. for formatting)
+- [ ] Information about how many tabs were found and sorted
+- [ ] Information about how many tabs matched the search but were unloaded
+- [ ] Custom code for post-processing selector value string (e.g. for formatting)
+- [ ] Fancy visual for all tabs found/sorted with their corresponding values
+- [ ] Ability to filter out (i.e. close or maybe hide) matching tabs outside a range (then optionally recover if needed?)
