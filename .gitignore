@@ -1,2 +1,5 @@
+# Prompts
+.claude/
+
+# macOS
 .DS_Store
-examples/
