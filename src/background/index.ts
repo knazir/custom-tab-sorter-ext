@@ -491,7 +491,7 @@ async function extractValuesFromTabs(
 
     // Add timeout to individual extraction
     const timeoutPromise = new Promise<ExtractedValue>((_, reject) =>
-      setTimeout(() => reject(new Error('Extraction timeout')), 5000)
+      setTimeout(() => reject(new Error('timeout')), 5000)
     );
 
     const extractionPromise = extractValueFromTab(
@@ -505,12 +505,20 @@ async function extractValuesFromTabs(
       const result = await Promise.race([extractionPromise, timeoutPromise]);
       return result;
     } catch (error) {
-      console.error(`Error extracting from tab ${tab.id}:`, error);
+      const errorMessage = String(error);
+      const isTimeout = errorMessage.includes('timeout');
+
+      if (isTimeout) {
+        console.log(`Tab ${tab.id} extraction timed out after 5s, treating as null value`);
+      } else {
+        console.warn(`Tab ${tab.id} extraction failed:`, error);
+      }
+
       return {
         tabId: tab.id,
         value: null,
         diagnostics: {
-          notes: `Extraction error: ${error}`
+          notes: isTimeout ? 'Extraction timed out (tab may be loading)' : `Extraction failed: ${errorMessage}`
         }
       };
     }
@@ -519,23 +527,36 @@ async function extractValuesFromTabs(
   console.log('Waiting for all extractions to complete...');
 
   try {
-    // Add global timeout for all promises
+    // Add global timeout for all promises (20 seconds for large numbers of tabs)
     const allPromisesWithTimeout = Promise.race([
       Promise.allSettled(promises),
       new Promise<PromiseSettledResult<ExtractedValue>[]>((_, reject) =>
-        setTimeout(() => reject(new Error('Global extraction timeout')), 15000)
+        setTimeout(() => reject(new Error('Global extraction timeout')), 20000)
       )
     ]);
 
     const results = await allPromisesWithTimeout;
     console.log(`Promise.allSettled completed with ${results.length} results`);
 
+    let successCount = 0;
+    let timeoutCount = 0;
+    let errorCount = 0;
+
     const extractedValues = results.map((result, index) => {
       if (result.status === 'fulfilled') {
-        console.log(`Tab ${tabs[index].id} succeeded with value:`, result.value?.value);
-        return result.value;
+        const value = result.value;
+        if (value?.value !== null && value?.value !== undefined) {
+          successCount++;
+          console.log(`Tab ${tabs[index].id} succeeded with value:`, value.value);
+        } else if (value?.diagnostics?.notes?.includes('timeout')) {
+          timeoutCount++;
+        } else {
+          errorCount++;
+        }
+        return value;
       } else {
-        console.log(`Tab ${tabs[index].id} failed:`, result.reason);
+        errorCount++;
+        console.log(`Tab ${tabs[index].id} promise rejected:`, result.reason);
         return {
           tabId: tabs[index].id,
           value: null,
@@ -546,17 +567,17 @@ async function extractValuesFromTabs(
       }
     });
 
-    console.log(`Returning ${extractedValues.length} extracted values`);
+    console.log(`Extraction complete: ${successCount} successful, ${timeoutCount} timeouts, ${errorCount} errors`);
     return extractedValues;
   } catch (error) {
     console.error('Critical error in extractValuesFromTabs:', error);
-    // Return empty array on timeout
+    // Return partial results on global timeout
     if (error instanceof Error && error.message.includes('timeout')) {
-      console.error('Extraction timed out, returning empty results');
+      console.warn('Global extraction timeout after 20s, using null values for remaining tabs');
       return tabs.map(tab => ({
         tabId: tab.id,
         value: null,
-        diagnostics: { notes: 'Extraction timed out' }
+        diagnostics: { notes: 'Global timeout - tab may be slow to load' }
       }));
     }
     throw error;

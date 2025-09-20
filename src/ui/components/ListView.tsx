@@ -63,9 +63,14 @@ export function ListView({ tabs, errors, onTabClick }: ListViewProps) {
               >
                 <div className="error-text">
                   <strong>{displayName}:</strong> {error.error}
-                  {error.error.includes('not loaded') && (
+                  {(error.error.includes('not loaded') || error.error.includes('discarded')) && (
                     <span style={{ fontSize: '10px', display: 'block', marginTop: '2px', opacity: 0.7 }}>
                       Tab is suspended - click to view
+                    </span>
+                  )}
+                  {error.error.includes('timeout') && (
+                    <span style={{ fontSize: '10px', display: 'block', marginTop: '2px', opacity: 0.7 }}>
+                      Tab took too long to respond - will be sorted to the end
                     </span>
                   )}
                 </div>
