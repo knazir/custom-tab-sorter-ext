@@ -29,6 +29,7 @@ export function Popup() {
   const [regexTestResult, setRegexTestResult] = useState<string | null>(null);
   const [regexTestLoading, setRegexTestLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [applyLoading, setApplyLoading] = useState(false);
 
   // Save state to storage whenever form values change
   const savePopupState = useCallback(async () => {
@@ -181,9 +182,12 @@ export function Popup() {
   }
 
   async function handleApply() {
-    if (!previewResult) return;
+    console.log('=== POPUP: Starting apply ===');
 
     setError(null);
+    setApplyLoading(true);
+    // Clear any existing preview since we're applying fresh
+    setPreviewResult(null);
 
     try {
       const sortKey: SortKey = {
@@ -194,7 +198,8 @@ export function Popup() {
         direction
       };
 
-      await chrome.runtime.sendMessage({
+      console.log('POPUP: Sending SORT_TABS message');
+      const response = await chrome.runtime.sendMessage({
         type: 'SORT_TABS',
         urlRegex: urlRegex || undefined,
         sortKeys: [sortKey],
@@ -202,12 +207,21 @@ export function Popup() {
         missingValuePolicy: settings?.missingValuePolicy || 'last'
       });
 
-      // Clear preview after successful apply (tabs are now sorted)
-      await chrome.storage.local.remove(PREVIEW_RESULT_KEY);
+      console.log('POPUP: Sort response:', response);
 
-      window.close();
+      if (response) {
+        // Clear preview after successful apply (tabs are now sorted)
+        await chrome.storage.local.remove(PREVIEW_RESULT_KEY);
+        console.log('POPUP: Tabs sorted successfully, closing popup');
+        window.close();
+      } else {
+        setError('Failed to apply sort');
+      }
     } catch (err) {
+      console.error('POPUP: Error in handleApply:', err);
       setError(err instanceof Error ? err.message : 'Failed to apply sort');
+    } finally {
+      setApplyLoading(false);
     }
   }
 
@@ -489,20 +503,26 @@ export function Popup() {
               'Preview'
             )}
           </button>
-          {previewResult && !previewLoading && (
-            <button
-              onClick={handleApply}
-              className="btn btn-success"
-            >
-              Apply Sort
-            </button>
-          )}
+          <button
+            onClick={handleApply}
+            className="btn btn-success"
+            disabled={previewLoading || applyLoading || !selector}
+          >
+            {applyLoading ? (
+              <>
+                <span className="spinner"></span>
+                Applying sort...
+              </>
+            ) : (
+              'Apply Sort'
+            )}
+          </button>
         </div>
 
-        {previewLoading && (
+        {(previewLoading || applyLoading) && (
           <div className="loading-message">
             <div className="loading-spinner"></div>
-            <p>Extracting values from matched tabs...</p>
+            <p>{applyLoading ? 'Applying sort to tabs...' : 'Extracting values from matched tabs...'}</p>
             <p className="loading-hint">This may take a few seconds depending on the number of tabs.</p>
           </div>
         )}

@@ -39,7 +39,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SORT_TABS') {
-    handleSortRequest(message).then(sendResponse);
+    handleSortRequest(message)
+      .then(result => {
+        console.log('Sort completed successfully');
+        sendResponse(result);
+      })
+      .catch(error => {
+        console.error('Error in sort request:', error);
+        sendResponse({ tabs: [], errors: [{ error: String(error) }] });
+      });
     return true;
   }
 
@@ -325,14 +333,23 @@ async function handleConfigureSort(tabId: number, tabUrl: string) {
 }
 
 async function handleSortRequest(message: any): Promise<SortResult> {
+  console.log('=== SORT REQUEST START (Apply) ===');
   const { urlRegex, sortKeys, keepPinnedStatic, missingValuePolicy } = message;
+  console.log('Sort params:', { urlRegex, sortKeys, keepPinnedStatic, missingValuePolicy });
 
-  return performSort(
-    urlRegex,
-    sortKeys,
-    keepPinnedStatic,
-    missingValuePolicy
-  );
+  try {
+    const result = await performSort(
+      urlRegex,
+      sortKeys,
+      keepPinnedStatic,
+      missingValuePolicy
+    );
+    console.log('=== SORT REQUEST COMPLETE ===');
+    return result;
+  } catch (error) {
+    console.error('Error in handleSortRequest:', error);
+    throw error;
+  }
 }
 
 async function handlePreviewRequest(message: any): Promise<SortResult> {
@@ -411,8 +428,13 @@ async function performSort(
   keepPinnedStatic: boolean,
   missingValuePolicy: 'last' | 'first' | 'error'
 ): Promise<SortResult> {
+  console.log('performSort: Getting target tabs...');
   const tabs = await getTargetTabs(urlRegex);
+  console.log(`performSort: Found ${tabs.length} tabs`);
+
+  console.log('performSort: Extracting values...');
   const extractedValues = await extractValuesFromTabs(tabs, sortKeys[0]);
+  console.log(`performSort: Extracted ${extractedValues.length} values`);
 
   const tabsWithValues: TabWithValue[] = tabs.map(tab => {
     const extracted = extractedValues.find(e => e.tabId === tab.id);
@@ -423,10 +445,14 @@ async function performSort(
     };
   });
 
+  console.log('performSort: Creating comparator and sorting...');
   const comparator = createComparator(sortKeys, missingValuePolicy);
   const sortedTabs = stableSort(tabsWithValues, comparator);
+  console.log(`performSort: Sorted ${sortedTabs.length} tabs`);
 
+  console.log('performSort: Moving tabs to new positions...');
   await moveTabs(sortedTabs, keepPinnedStatic);
+  console.log('performSort: Tab movement complete');
 
   const errors = extractedValues
     .filter(e => e.value === null)
@@ -440,6 +466,7 @@ async function performSort(
       };
     });
 
+  console.log(`performSort: Complete with ${errors.length} errors`);
   return { tabs: sortedTabs, errors };
 }
 

@@ -58,6 +58,8 @@ export async function moveTabs(
   tabs: TabInfo[],
   keepPinnedStatic: boolean
 ): Promise<void> {
+  console.log(`[moveTabs] Moving ${tabs.length} tabs, keepPinnedStatic: ${keepPinnedStatic}`);
+
   const tabsByWindow = new Map<number, TabInfo[]>();
 
   for (const tab of tabs) {
@@ -66,29 +68,52 @@ export async function moveTabs(
     tabsByWindow.set(tab.windowId, windowTabs);
   }
 
+  console.log(`[moveTabs] Tabs grouped into ${tabsByWindow.size} window(s)`);
+
   for (const [windowId, windowTabs] of tabsByWindow) {
-    let targetIndex = 0;
+    console.log(`[moveTabs] Processing window ${windowId} with ${windowTabs.length} tabs`);
+
     const pinnedTabs = windowTabs.filter(t => t.pinned);
     const unpinnedTabs = windowTabs.filter(t => !t.pinned);
 
+    console.log(`[moveTabs] Window ${windowId}: ${pinnedTabs.length} pinned, ${unpinnedTabs.length} unpinned`);
+
     if (keepPinnedStatic) {
-      targetIndex = pinnedTabs.length;
+      // Start moving unpinned tabs after all pinned tabs
+      let targetIndex = pinnedTabs.length;
+      console.log(`[moveTabs] Keeping pinned tabs static, starting at index ${targetIndex}`);
 
       for (const tab of unpinnedTabs) {
-        await chrome.tabs.move(tab.id, {
-          windowId,
-          index: targetIndex++
-        });
+        console.log(`[moveTabs] Moving tab ${tab.id} (${tab.title?.substring(0, 30)}) to index ${targetIndex}`);
+        try {
+          await chrome.tabs.move(tab.id, {
+            windowId,
+            index: targetIndex
+          });
+          targetIndex++;
+        } catch (error) {
+          console.error(`[moveTabs] Failed to move tab ${tab.id}:`, error);
+        }
       }
     } else {
+      // Move all tabs including pinned ones
+      let targetIndex = 0;
       for (const tab of windowTabs) {
-        await chrome.tabs.move(tab.id, {
-          windowId,
-          index: targetIndex++
-        });
+        console.log(`[moveTabs] Moving tab ${tab.id} to index ${targetIndex}`);
+        try {
+          await chrome.tabs.move(tab.id, {
+            windowId,
+            index: targetIndex
+          });
+          targetIndex++;
+        } catch (error) {
+          console.error(`[moveTabs] Failed to move tab ${tab.id}:`, error);
+        }
       }
     }
   }
+
+  console.log('[moveTabs] Tab movement complete');
 }
 
 export async function focusTab(tabId: number): Promise<void> {
