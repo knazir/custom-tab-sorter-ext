@@ -1,0 +1,62 @@
+{
+  "profiles": [
+    {
+      "id": "imdb-rating",
+      "label": "IMDb Rating",
+      "domainPattern": "*.imdb.com",
+      "selector": "[data-testid=\"hero-rating-bar__aggregate-rating__score\"] span:first-child",
+      "parseAs": "number"
+    },
+    {
+      "id": "goodreads-rating",
+      "label": "Goodreads Rating",
+      "domainPattern": "*.goodreads.com",
+      "selector": "[itemprop=\"ratingValue\"]",
+      "parseAs": "number"
+    },
+    {
+      "id": "amazon-price",
+      "label": "Amazon Price",
+      "domainPattern": "*.amazon.*",
+      "selector": ".a-price-whole, .a-price-range, [data-a-color=\"price\"]",
+      "parseAs": "price"
+    },
+    {
+      "id": "youtube-views",
+      "label": "YouTube Views",
+      "domainPattern": "*.youtube.com",
+      "selector": "#info span.view-count, ytd-video-view-count-renderer span.view-count",
+      "parseAs": "number"
+    },
+    {
+      "id": "reddit-upvotes",
+      "label": "Reddit Upvotes",
+      "domainPattern": "*.reddit.com",
+      "selector": "[data-test-id=\"post-content\"] div[style*=\"upvote\"] + div, shreddit-post div[slot=\"vote-count\"]",
+      "parseAs": "number"
+    },
+    {
+      "id": "github-stars",
+      "label": "GitHub Stars",
+      "domainPattern": "github.com",
+      "selector": "#repo-stars-counter-star",
+      "attribute": "title",
+      "parseAs": "number"
+    },
+    {
+      "id": "hackernews-points",
+      "label": "Hacker News Points",
+      "domainPattern": "news.ycombinator.com",
+      "selector": ".score",
+      "parseAs": "number"
+    },
+    {
+      "id": "stackoverflow-score",
+      "label": "Stack Overflow Score",
+      "domainPattern": "stackoverflow.com",
+      "selector": "[data-value]:has([data-score])",
+      "attribute": "data-value",
+      "parseAs": "number"
+    }
+  ]
+}

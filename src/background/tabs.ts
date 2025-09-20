@@ -1,0 +1,83 @@
+import { Scope, TabInfo } from '../types';
+
+export async function getTargetTabs(
+  scope: Scope,
+  urlRegex?: string
+): Promise<TabInfo[]> {
+  const queryOptions: chrome.tabs.QueryInfo = {};
+
+  if (scope === 'currentWindow') {
+    queryOptions.currentWindow = true;
+  }
+
+  const tabs = await chrome.tabs.query(queryOptions);
+
+  let filteredTabs = tabs.filter(tab =>
+    tab.id !== undefined &&
+    tab.url !== undefined &&
+    !tab.url.startsWith('chrome://')
+  );
+
+  if (urlRegex) {
+    try {
+      const regex = new RegExp(urlRegex, 'i');
+      filteredTabs = filteredTabs.filter(tab => regex.test(tab.url!));
+    } catch (e) {
+      console.error('Invalid regex:', urlRegex, e);
+    }
+  }
+
+  return filteredTabs.map(tab => ({
+    id: tab.id!,
+    title: tab.title || '',
+    url: tab.url!,
+    favIconUrl: tab.favIconUrl,
+    index: tab.index,
+    pinned: tab.pinned || false,
+    windowId: tab.windowId!,
+    groupId: tab.groupId
+  }));
+}
+
+export async function moveTabs(
+  tabs: TabInfo[],
+  keepPinnedStatic: boolean
+): Promise<void> {
+  const tabsByWindow = new Map<number, TabInfo[]>();
+
+  for (const tab of tabs) {
+    const windowTabs = tabsByWindow.get(tab.windowId) || [];
+    windowTabs.push(tab);
+    tabsByWindow.set(tab.windowId, windowTabs);
+  }
+
+  for (const [windowId, windowTabs] of tabsByWindow) {
+    let targetIndex = 0;
+    const pinnedTabs = windowTabs.filter(t => t.pinned);
+    const unpinnedTabs = windowTabs.filter(t => !t.pinned);
+
+    if (keepPinnedStatic) {
+      targetIndex = pinnedTabs.length;
+
+      for (const tab of unpinnedTabs) {
+        await chrome.tabs.move(tab.id, {
+          windowId,
+          index: targetIndex++
+        });
+      }
+    } else {
+      for (const tab of windowTabs) {
+        await chrome.tabs.move(tab.id, {
+          windowId,
+          index: targetIndex++
+        });
+      }
+    }
+  }
+}
+
+export async function focusTab(tabId: number): Promise<void> {
+  const tab = await chrome.tabs.get(tabId);
+  await chrome.tabs.update(tabId, { active: true });
+  await chrome.windows.update(tab.windowId!, { focused: true });
+}

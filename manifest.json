@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Sorter",
+  "version": "0.1.0",
+  "description": "Sort browser tabs by values scraped from each tab's content",
+  "action": {
+    "default_popup": "dist/src/ui/popup/index.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "options_page": "dist/src/ui/options/index.html",
+  "background": {
+    "service_worker": "dist/background/index.js",
+    "type": "module"
+  },
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}
