@@ -60,7 +60,6 @@ export type SortResult = {
 
 export type MessageType =
   | { type: "EXTRACT_VALUE"; selector: string; attribute?: string; parseAs?: string }
-  | { type: "AUTO_DETECT" }
   | { type: "GET_CONTEXT_TARGET" }
   | { type: "CLEAR_CONTEXT_TARGET" };
 

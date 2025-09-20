@@ -60,46 +60,6 @@ export async function extractValueFromTab(
   return extractedValue;
 }
 
-export async function autoDetectValueFromTab(
-  tabId: number
-): Promise<ExtractedValue> {
-  // Check if tab is loaded
-  const tab = await chrome.tabs.get(tabId);
-  if (tab.status === 'unloaded' || tab.discarded) {
-    return {
-      tabId,
-      value: null,
-      diagnostics: { notes: 'Tab not loaded (discarded)' }
-    };
-  }
-
-  const injected = await injectContentScript(tabId);
-
-  if (!injected) {
-    return {
-      tabId,
-      value: null,
-      diagnostics: { notes: 'Protected page' }
-    };
-  }
-
-  const response = await sendMessageToTab(tabId, {
-    type: 'AUTO_DETECT'
-  });
-
-  if (!response || typeof response !== 'object') {
-    return {
-      tabId,
-      value: null,
-      diagnostics: { notes: 'Auto-detection failed' }
-    };
-  }
-
-  // Ensure the tabId is set correctly
-  const extractedValue = response as ExtractedValue;
-  extractedValue.tabId = tabId;
-  return extractedValue;
-}
 
 export async function injectContentScript(tabId: number): Promise<boolean> {
   try {

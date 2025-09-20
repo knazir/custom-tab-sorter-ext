@@ -22,8 +22,21 @@ export async function getTargetTabs(
 
   if (urlRegex) {
     try {
+      console.log('Testing regex pattern:', urlRegex);
       const regex = new RegExp(urlRegex, 'i');
-      filteredTabs = filteredTabs.filter(tab => regex.test(tab.url!));
+      console.log('Regex created successfully:', regex);
+
+      const beforeCount = filteredTabs.length;
+      filteredTabs = filteredTabs.filter(tab => {
+        const matches = regex.test(tab.url!);
+        if (matches) {
+          console.log('✅ Matched:', tab.url);
+        } else {
+          console.log('❌ Not matched:', tab.url);
+        }
+        return matches;
+      });
+      console.log(`Filtered from ${beforeCount} to ${filteredTabs.length} tabs`);
     } catch (e) {
       console.error('Invalid regex:', urlRegex, e);
     }

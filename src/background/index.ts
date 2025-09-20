@@ -1,7 +1,7 @@
 import { getSettings, saveSettings } from './config';
 import { getTargetTabs, moveTabs, focusTab, getUnloadedTabs } from './tabs';
 import { createComparator, stableSort, TabWithValue } from './sorting';
-import { extractValueFromTab, autoDetectValueFromTab, injectContentScript } from './messaging';
+import { extractValueFromTab, injectContentScript } from './messaging';
 import { Settings, SortKey, SortResult, ExtractedValue } from '../types';
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -77,8 +77,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'AUTO_DETECT_ACTIVE_TAB') {
-    handleAutoDetectActiveTab().then(sendResponse);
+  if (message.type === 'TEST_REGEX') {
+    handleTestRegex(message.urlRegex).then(sendResponse);
     return true;
   }
 
@@ -103,6 +103,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleTestSelector(tabId: number, selector: string, parseAs?: string) {
   const result = await extractValueFromTab(tabId, selector, undefined, parseAs);
   return result;
+}
+
+async function handleTestRegex(urlRegex?: string) {
+  // Test which tabs match the regex pattern
+  const tabs = await getTargetTabs(urlRegex);
+  return tabs.map(tab => ({
+    id: tab.id,
+    title: tab.title,
+    url: tab.url,
+    favIconUrl: tab.favIconUrl
+  }));
 }
 
 async function handleCheckUnloadedTabs(urlRegex?: string) {
@@ -179,65 +190,6 @@ async function handleLoadUnloadedTabs(urlRegex?: string) {
   };
 }
 
-async function handleAutoDetectActiveTab() {
-  // Get the active tab
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-  if (!activeTab || !activeTab.id) {
-    return {
-      success: false,
-      error: 'No active tab found'
-    };
-  }
-
-  // Try to auto-detect on the active tab
-  const injected = await injectContentScript(activeTab.id);
-
-  if (!injected) {
-    return {
-      success: false,
-      error: 'Cannot access this page'
-    };
-  }
-
-  // Send auto-detect message to the content script
-  const response = await chrome.tabs.sendMessage(activeTab.id, {
-    type: 'AUTO_DETECT'
-  });
-
-  if (response && response.value !== null && response.value !== undefined) {
-    // Auto-detection found something
-    // Try to get the selector that was used (we'll need to modify the content script to return this)
-    return {
-      success: true,
-      value: response.value,
-      rawText: response.rawText,
-      diagnostics: response.diagnostics,
-      parseAs: guessParseType(response.value)
-    };
-  }
-
-  return {
-    success: false,
-    error: 'No suitable field found on this page'
-  };
-}
-
-function guessParseType(value: any): string {
-  if (!value) return 'text';
-
-  const stringValue = String(value).trim();
-
-  if (/^\d+(\.\d+)?$/.test(stringValue)) {
-    return 'number';
-  } else if (/[\$£€¥]/.test(stringValue) || /\d+[.,]\d{2}$/.test(stringValue)) {
-    return 'price';
-  } else if (/\d{4}-\d{2}-\d{2}/.test(stringValue) || /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(stringValue)) {
-    return 'date';
-  }
-
-  return 'text';
-}
 
 async function handleAutoSort(tabId: number, tabUrl: string) {
   const injected = await injectContentScript(tabId);
@@ -459,7 +411,12 @@ async function extractValuesFromTabs(
         sortKey.parseAs
       );
     } else {
-      return autoDetectValueFromTab(tab.id);
+      // No selector provided - return null value
+      return {
+        tabId: tab.id,
+        value: null,
+        error: 'No selector provided'
+      };
     }
   });
 

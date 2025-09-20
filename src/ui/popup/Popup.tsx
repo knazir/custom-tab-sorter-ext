@@ -26,6 +26,8 @@ export function Popup() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
   const [loadingTabs, setLoadingTabs] = useState(false);
+  const [regexTestResult, setRegexTestResult] = useState<string | null>(null);
+  const [regexTestLoading, setRegexTestLoading] = useState(false);
 
   // Save state to storage whenever form values change
   const savePopupState = useCallback(async () => {
@@ -191,57 +193,28 @@ export function Popup() {
     }
   }
 
-  async function handleAutoDetect() {
-    setError(null);
-    setUnloadedWarning(null);
+  async function handleTestRegex() {
+    setRegexTestLoading(true);
+    setRegexTestResult(null);
 
     try {
-      // First detect on the active tab only
-      const detection = await chrome.runtime.sendMessage({
-        type: 'AUTO_DETECT_ACTIVE_TAB'
+      // Query tabs with the current regex
+      const tabs = await chrome.runtime.sendMessage({
+        type: 'TEST_REGEX',
+        urlRegex: urlRegex || undefined
       });
 
-      if (!detection.success) {
-        setError(detection.error || 'No suitable field found on this page');
-        setLoading(false);
-        return;
-      }
-
-      // Use the detected selector (if available) or keep empty for auto-detect
-      const detectedSelector = detection.diagnostics?.selector || '';
-      setSelector(detectedSelector);
-
-      // Set the parse type based on what was detected
-      if (detection.parseAs) {
-        setParseAs(detection.parseAs as any);
-      }
-
-      // Now preview with the detected settings
-      const sortKey: SortKey = {
-        id: 'auto-detect',
-        label: 'Auto Detection',
-        selector: detectedSelector || undefined,
-        parseAs: detection.parseAs || parseAs,
-        direction
-      };
-
-      const result = await chrome.runtime.sendMessage({
-        type: 'PREVIEW_SORT',
-        urlRegex: urlRegex || undefined,
-        sortKeys: [sortKey],
-        missingValuePolicy: settings?.missingValuePolicy || 'last'
-      });
-
-      setPreviewResult(result);
-      await savePreviewResult(result);
-
-      // Show what was detected
-      if (detection.diagnostics?.rule) {
-        setError(null); // Clear any error
-        // Could show a success message here if desired
+      if (tabs && tabs.length > 0) {
+        // Show matched tabs with their URLs
+        const tabList = tabs.map((tab: any) => `• ${tab.title || 'Untitled'}\n  ${tab.url}`).join('\n\n');
+        setRegexTestResult(`Matched ${tabs.length} tab${tabs.length === 1 ? '' : 's'}:\n\n${tabList}`);
+      } else {
+        setRegexTestResult('No tabs matched this pattern');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Auto-detection failed');
+      setRegexTestResult('Error: ' + (err instanceof Error ? err.message : 'Failed to test regex'));
+    } finally {
+      setRegexTestLoading(false);
     }
   }
 
@@ -344,6 +317,7 @@ export function Popup() {
     setPreviewResult(null);
     setError(null);
     setTestResult(null);
+    setRegexTestResult(null);
     setUnloadedWarning(null);
     setUnloadedTabCount(0);
     // Clear saved state and preview
@@ -379,6 +353,24 @@ export function Popup() {
               className="form-input"
             />
           </label>
+          {urlRegex && (
+            <>
+              <button
+                onClick={handleTestRegex}
+                className="btn btn-test"
+                disabled={regexTestLoading}
+                title="Test which tabs match this regex pattern"
+                style={{ marginTop: '8px' }}
+              >
+                {regexTestLoading ? 'Testing...' : 'Test Regex'}
+              </button>
+              {regexTestResult && (
+                <div className="test-result" style={{ marginTop: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                  <pre style={{ margin: 0, fontSize: '12px' }}>{regexTestResult}</pre>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <div className="form-section">
@@ -392,13 +384,6 @@ export function Popup() {
               className="form-input"
             />
           </label>
-          <button
-            onClick={handleAutoDetect}
-            className="btn btn-secondary"
-            title="Automatically detect common fields (ratings, prices, dates)"
-          >
-            Auto-Detect
-          </button>
         </div>
 
         <div className="form-section">
