@@ -44,8 +44,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'PREVIEW_SORT') {
-    handlePreviewRequest(message).then(sendResponse);
-    return true;
+    handlePreviewRequest(message)
+      .then(result => {
+        console.log('Sending preview response:', result);
+        sendResponse(result);
+      })
+      .catch(error => {
+        console.error('Error in preview request:', error);
+        sendResponse({ tabs: [], errors: [{ error: String(error) }] });
+      });
+    return true;  // Will respond asynchronously
   }
 
   if (message.type === 'FOCUS_TAB') {
@@ -328,36 +336,73 @@ async function handleSortRequest(message: any): Promise<SortResult> {
 }
 
 async function handlePreviewRequest(message: any): Promise<SortResult> {
+  console.log('=== PREVIEW REQUEST START ===');
   const { urlRegex, sortKeys, missingValuePolicy } = message;
+  console.log('Preview params:', { urlRegex, sortKeys, missingValuePolicy });
 
-  const tabs = await getTargetTabs(urlRegex);
-  const extractedValues = await extractValuesFromTabs(tabs, sortKeys[0]);
+  try {
+    const tabs = await getTargetTabs(urlRegex);
+    console.log(`Found ${tabs.length} matching tabs`);
 
-  const tabsWithValues: TabWithValue[] = tabs.map(tab => {
-    const extracted = extractedValues.find(e => e.tabId === tab.id);
-    return {
-      ...tab,
-      extractedValue: extracted?.value,
-      rawText: extracted?.rawText
-    };
-  });
+    if (tabs.length === 0) {
+      console.warn('No tabs matched the filter!');
+      return { tabs: [], errors: [] };
+    }
 
-  const comparator = createComparator(sortKeys, missingValuePolicy);
-  const sortedTabs = stableSort(tabsWithValues, comparator);
+    console.log('Starting extraction...');
+    const extractedValues = await extractValuesFromTabs(tabs, sortKeys[0]);
+    console.log(`Extraction complete. Got ${extractedValues.length} values`);
 
-  const errors = extractedValues
-    .filter(e => e.value === null)
-    .map(e => {
-      const tab = tabs.find(t => t.id === e.tabId);
+    const tabsWithValues: TabWithValue[] = tabs.map(tab => {
+      const extracted = extractedValues.find(e => e.tabId === tab.id);
       return {
-        tabId: e.tabId,
-        error: e.diagnostics?.notes || 'Failed to extract value',
-        tabTitle: tab?.title,
-        tabUrl: tab?.url
+        ...tab,
+        extractedValue: extracted?.value,
+        rawText: extracted?.rawText
       };
     });
 
-  return { tabs: sortedTabs, errors };
+    const validCount = tabsWithValues.filter(t => t.extractedValue !== null).length;
+    console.log(`${validCount} tabs have valid values`);
+
+    console.log('Creating comparator...');
+    const comparator = createComparator(sortKeys, missingValuePolicy);
+
+    console.log('Sorting tabs...');
+    const sortedTabs = stableSort(tabsWithValues, comparator);
+    console.log(`Sorted ${sortedTabs.length} tabs`);
+
+    const errors = extractedValues
+      .filter(e => e.value === null)
+      .map(e => {
+        const tab = tabs.find(t => t.id === e.tabId);
+        return {
+          tabId: e.tabId,
+          error: e.diagnostics?.notes || 'Failed to extract value',
+          tabTitle: tab?.title,
+          tabUrl: tab?.url
+        };
+      });
+
+    console.log(`Found ${errors.length} errors`);
+    console.log('=== PREVIEW REQUEST END ===');
+
+    const result = { tabs: sortedTabs, errors };
+    console.log(`Returning result with ${result.tabs.length} tabs and ${result.errors.length} errors`);
+    return result;
+  } catch (error) {
+    console.error('Error in handlePreviewRequest:', error);
+    // Return a valid result even on error
+    return {
+      tabs: [],
+      errors: [{
+        tabId: -1,
+        error: String(error),
+        tabTitle: 'Error',
+        tabUrl: ''
+      }]
+    };
+  }
 }
 
 async function performSort(
@@ -402,37 +447,91 @@ async function extractValuesFromTabs(
   tabs: { id: number }[],
   sortKey: SortKey
 ): Promise<ExtractedValue[]> {
+  console.log(`Extracting values from ${tabs.length} tabs with sortKey:`, sortKey);
+
+  // Create promises for each tab with individual timeout
   const promises = tabs.map(async (tab) => {
-    if (sortKey.selector) {
-      return extractValueFromTab(
-        tab.id,
-        sortKey.selector,
-        sortKey.attribute,
-        sortKey.parseAs
-      );
-    } else {
-      // No selector provided - return null value
+    if (!sortKey.selector) {
+      console.log(`No selector for tab ${tab.id}`);
       return {
         tabId: tab.id,
         value: null,
         error: 'No selector provided'
       };
     }
-  });
 
-  const results = await Promise.allSettled(promises);
+    console.log(`Extracting from tab ${tab.id} with selector: ${sortKey.selector}`);
 
-  return results.map((result, index) => {
-    if (result.status === 'fulfilled') {
-      return result.value;
-    } else {
+    // Add timeout to individual extraction
+    const timeoutPromise = new Promise<ExtractedValue>((_, reject) =>
+      setTimeout(() => reject(new Error('Extraction timeout')), 5000)
+    );
+
+    const extractionPromise = extractValueFromTab(
+      tab.id,
+      sortKey.selector,
+      sortKey.attribute,
+      sortKey.parseAs
+    );
+
+    try {
+      const result = await Promise.race([extractionPromise, timeoutPromise]);
+      return result;
+    } catch (error) {
+      console.error(`Error extracting from tab ${tab.id}:`, error);
       return {
-        tabId: tabs[index].id,
+        tabId: tab.id,
         value: null,
         diagnostics: {
-          notes: 'Extraction failed: ' + result.reason
+          notes: `Extraction error: ${error}`
         }
       };
     }
   });
+
+  console.log('Waiting for all extractions to complete...');
+
+  try {
+    // Add global timeout for all promises
+    const allPromisesWithTimeout = Promise.race([
+      Promise.allSettled(promises),
+      new Promise<PromiseSettledResult<ExtractedValue>[]>((_, reject) =>
+        setTimeout(() => reject(new Error('Global extraction timeout')), 15000)
+      )
+    ]);
+
+    const results = await allPromisesWithTimeout;
+    console.log(`Promise.allSettled completed with ${results.length} results`);
+
+    const extractedValues = results.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        console.log(`Tab ${tabs[index].id} succeeded with value:`, result.value?.value);
+        return result.value;
+      } else {
+        console.log(`Tab ${tabs[index].id} failed:`, result.reason);
+        return {
+          tabId: tabs[index].id,
+          value: null,
+          diagnostics: {
+            notes: 'Extraction failed: ' + String(result.reason)
+          }
+        };
+      }
+    });
+
+    console.log(`Returning ${extractedValues.length} extracted values`);
+    return extractedValues;
+  } catch (error) {
+    console.error('Critical error in extractValuesFromTabs:', error);
+    // Return empty array on timeout
+    if (error instanceof Error && error.message.includes('timeout')) {
+      console.error('Extraction timed out, returning empty results');
+      return tabs.map(tab => ({
+        tabId: tab.id,
+        value: null,
+        diagnostics: { notes: 'Extraction timed out' }
+      }));
+    }
+    throw error;
+  }
 }

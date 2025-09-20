@@ -28,6 +28,7 @@ export function Popup() {
   const [loadingTabs, setLoadingTabs] = useState(false);
   const [regexTestResult, setRegexTestResult] = useState<string | null>(null);
   const [regexTestLoading, setRegexTestLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Save state to storage whenever form values change
   const savePopupState = useCallback(async () => {
@@ -130,9 +131,11 @@ export function Popup() {
   }
 
   async function handlePreview() {
+    console.log('=== POPUP: Starting preview ===');
     // Clear the old preview first to show visual feedback
     setPreviewResult(null);
     setError(null);
+    setPreviewLoading(true);
 
     // Force a small delay to ensure UI updates
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -146,20 +149,35 @@ export function Popup() {
         direction
       };
 
-      const result = await chrome.runtime.sendMessage({
+      const message = {
         type: 'PREVIEW_SORT',
         urlRegex: urlRegex || undefined,
         sortKeys: [sortKey],
         missingValuePolicy: settings?.missingValuePolicy || 'last'
-      });
+      };
+
+      console.log('POPUP: Sending preview message:', message);
+
+      const result = await chrome.runtime.sendMessage(message);
+
+      console.log('POPUP: Received preview result:', result);
 
       if (result) {
+        console.log('POPUP: Setting preview result with', result.tabs?.length, 'tabs');
         setPreviewResult(result);
         await savePreviewResult(result);
+      } else {
+        console.warn('POPUP: No result received from background');
+        setError('No result received from background script');
       }
     } catch (err) {
+      console.error('POPUP: Error in handlePreview:', err);
       setError(err instanceof Error ? err.message : 'Failed to preview sort');
+    } finally {
+      setPreviewLoading(false);
     }
+
+    console.log('=== POPUP: Preview complete ===');
   }
 
   async function handleApply() {
@@ -460,10 +478,18 @@ export function Popup() {
           <button
             onClick={handlePreview}
             className="btn btn-primary"
+            disabled={previewLoading || !selector}
           >
-            Preview
+            {previewLoading ? (
+              <>
+                <span className="spinner"></span>
+                Extracting from tabs...
+              </>
+            ) : (
+              'Preview'
+            )}
           </button>
-          {previewResult && (
+          {previewResult && !previewLoading && (
             <button
               onClick={handleApply}
               className="btn btn-success"
@@ -472,6 +498,14 @@ export function Popup() {
             </button>
           )}
         </div>
+
+        {previewLoading && (
+          <div className="loading-message">
+            <div className="loading-spinner"></div>
+            <p>Extracting values from matched tabs...</p>
+            <p className="loading-hint">This may take a few seconds depending on the number of tabs.</p>
+          </div>
+        )}
 
         {previewResult && (
           <div className="preview-section">

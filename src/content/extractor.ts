@@ -1,17 +1,23 @@
 import { ExtractedValue, MessageType } from '../types';
 
+console.log('[Content Script] extractor.ts loaded');
+
 chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse) => {
+  console.log('[Content Script] Received message:', message);
+
   if (message.type === 'EXTRACT_VALUE') {
+    console.log('[Content Script] Processing EXTRACT_VALUE');
     const result = extractValue(
       message.selector,
       message.attribute,
       message.parseAs
     );
+    console.log('[Content Script] Extraction result:', result);
     sendResponse(result);
     return true;
   }
 
-
+  console.log('[Content Script] Unknown message type:', message.type);
   return false;
 });
 
