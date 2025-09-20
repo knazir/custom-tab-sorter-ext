@@ -141,6 +141,18 @@
   background: #7c3aed;
 }
 
+.btn-load-tabs {
+  background: #f59e0b;
+  color: white;
+  font-size: 12px;
+  padding: 6px 12px;
+  min-width: auto;
+}
+
+.btn-load-tabs:hover:not(:disabled) {
+  background: #d97706;
+}
+
 .button-group {
   display: flex;
   gap: 8px;
@@ -154,6 +166,19 @@
   border-radius: 6px;
   font-size: 13px;
   margin-bottom: 12px;
+}
+
+.warning-message {
+  padding: 8px 12px;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .preview-section {

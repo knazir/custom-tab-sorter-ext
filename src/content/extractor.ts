@@ -26,14 +26,37 @@ function extractValue(
   parseAs?: string
 ): ExtractedValue {
   try {
-    const element = document.querySelector(selector);
+    // Validate selector first
+    if (!selector || selector.trim() === '') {
+      return {
+        tabId: -1,
+        value: null,
+        diagnostics: {
+          notes: 'No selector provided'
+        }
+      };
+    }
+
+    // Try to parse the selector to check if it's valid
+    let element: Element | null;
+    try {
+      element = document.querySelector(selector);
+    } catch (selectorError) {
+      return {
+        tabId: -1,
+        value: null,
+        diagnostics: {
+          notes: `Invalid CSS selector: "${selector}"`
+        }
+      };
+    }
 
     if (!element) {
       return {
         tabId: -1,
         value: null,
         diagnostics: {
-          notes: `Element not found`
+          notes: `Element not found with selector: "${selector}"`
         }
       };
     }

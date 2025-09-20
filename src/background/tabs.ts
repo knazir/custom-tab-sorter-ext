@@ -83,3 +83,39 @@ export async function focusTab(tabId: number): Promise<void> {
   await chrome.tabs.update(tabId, { active: true });
   await chrome.windows.update(tab.windowId!, { focused: true });
 }
+
+export async function loadTab(tabId: number): Promise<boolean> {
+  try {
+    // Reload the tab to force it to load
+    await chrome.tabs.reload(tabId);
+    // Wait for it to complete loading
+    return new Promise((resolve) => {
+      const listener = (tabIdUpdated: number, changeInfo: chrome.tabs.TabChangeInfo) => {
+        if (tabIdUpdated === tabId && changeInfo.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve(true);
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(false);
+      }, 10000);
+    });
+  } catch (error) {
+    console.error(`Failed to load tab ${tabId}:`, error);
+    return false;
+  }
+}
+
+export async function getUnloadedTabs(tabs: TabInfo[]): Promise<number[]> {
+  const unloadedTabIds: number[] = [];
+  for (const tab of tabs) {
+    const fullTab = await chrome.tabs.get(tab.id);
+    if (fullTab.status === 'unloaded' || fullTab.discarded) {
+      unloadedTabIds.push(tab.id);
+    }
+  }
+  return unloadedTabIds;
+}

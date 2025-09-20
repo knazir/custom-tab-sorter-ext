@@ -1,5 +1,5 @@
 import { getSettings, saveSettings } from './config';
-import { getTargetTabs, moveTabs, focusTab } from './tabs';
+import { getTargetTabs, moveTabs, focusTab, getUnloadedTabs } from './tabs';
 import { createComparator, stableSort, TabWithValue } from './sorting';
 import { extractValueFromTab, autoDetectValueFromTab, injectContentScript } from './messaging';
 import { Settings, SortKey, SortResult, ExtractedValue } from '../types';
@@ -87,12 +87,96 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'CHECK_UNLOADED_TABS') {
+    handleCheckUnloadedTabs(message.urlRegex).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === 'LOAD_UNLOADED_TABS') {
+    handleLoadUnloadedTabs(message.urlRegex).then(sendResponse);
+    return true;
+  }
+
   return false;
 });
 
 async function handleTestSelector(tabId: number, selector: string, parseAs?: string) {
   const result = await extractValueFromTab(tabId, selector, undefined, parseAs);
   return result;
+}
+
+async function handleCheckUnloadedTabs(urlRegex?: string) {
+  const tabs = await getTargetTabs(urlRegex);
+  const unloadedTabIds = await getUnloadedTabs(tabs);
+
+  if (unloadedTabIds.length > 0) {
+    const unloadedTabs = tabs.filter(t => unloadedTabIds.includes(t.id));
+    return {
+      hasUnloaded: true,
+      count: unloadedTabIds.length,
+      total: tabs.length,
+      unloadedTabs: unloadedTabs.map(t => ({
+        id: t.id,
+        title: t.title || 'Untitled',
+        url: t.url
+      }))
+    };
+  }
+
+  return {
+    hasUnloaded: false,
+    count: 0,
+    total: tabs.length
+  };
+}
+
+async function handleLoadUnloadedTabs(urlRegex?: string) {
+  const tabs = await getTargetTabs(urlRegex);
+  const unloadedTabIds = await getUnloadedTabs(tabs);
+
+  if (unloadedTabIds.length === 0) {
+    return {
+      success: true,
+      loadedCount: 0,
+      message: 'No unloaded tabs to load'
+    };
+  }
+
+  let loadedCount = 0;
+  const errors: string[] = [];
+
+  // Load tabs in batches to avoid overwhelming the browser
+  const batchSize = 3;
+  for (let i = 0; i < unloadedTabIds.length; i += batchSize) {
+    const batch = unloadedTabIds.slice(i, i + batchSize);
+
+    await Promise.all(batch.map(async (tabId) => {
+      try {
+        // Simply reload the tab - this will force it to load
+        await chrome.tabs.reload(tabId);
+        loadedCount++;
+      } catch (error) {
+        const tab = tabs.find(t => t.id === tabId);
+        errors.push(`Failed to load tab: ${tab?.title || tabId}`);
+      }
+    }));
+
+    // Small delay between batches to avoid overwhelming the browser
+    if (i + batchSize < unloadedTabIds.length) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  // Wait a bit for tabs to fully load
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  return {
+    success: loadedCount > 0,
+    loadedCount,
+    totalUnloaded: unloadedTabIds.length,
+    errors,
+    message: `Loaded ${loadedCount} of ${unloadedTabIds.length} suspended tabs`
+  };
 }
 
 async function handleAutoDetectActiveTab() {

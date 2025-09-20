@@ -63,6 +63,11 @@ export function ListView({ tabs, errors, onTabClick }: ListViewProps) {
               >
                 <div className="error-text">
                   <strong>{displayName}:</strong> {error.error}
+                  {error.error.includes('not loaded') && (
+                    <span style={{ fontSize: '10px', display: 'block', marginTop: '2px', opacity: 0.7 }}>
+                      Tab is suspended - click to view
+                    </span>
+                  )}
                 </div>
               </div>
             );

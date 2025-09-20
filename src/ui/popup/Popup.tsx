@@ -20,10 +20,12 @@ export function Popup() {
   const [parseAs, setParseAs] = useState<'text' | 'number' | 'price' | 'date'>('text');
   const [direction, setDirection] = useState<'asc' | 'desc'>('asc');
   const [previewResult, setPreviewResult] = useState<SortResult | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unloadedWarning, setUnloadedWarning] = useState<string | null>(null);
+  const [unloadedTabCount, setUnloadedTabCount] = useState<number>(0);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [loadingTabs, setLoadingTabs] = useState(false);
 
   // Save state to storage whenever form values change
   const savePopupState = useCallback(async () => {
@@ -126,7 +128,7 @@ export function Popup() {
   }
 
   async function handlePreview() {
-    setLoading(true);
+    console.log('Preview button clicked');
     setError(null);
 
     try {
@@ -138,6 +140,8 @@ export function Popup() {
         direction
       };
 
+      console.log('Sending preview with sortKey:', sortKey);
+
       const result = await chrome.runtime.sendMessage({
         type: 'PREVIEW_SORT',
         urlRegex: urlRegex || undefined,
@@ -145,19 +149,21 @@ export function Popup() {
         missingValuePolicy: settings?.missingValuePolicy || 'last'
       });
 
-      setPreviewResult(result);
-      await savePreviewResult(result);
+      console.log('Preview result:', result);
+
+      if (result) {
+        setPreviewResult(result);
+        await savePreviewResult(result);
+      }
     } catch (err) {
+      console.error('Preview error:', err);
       setError(err instanceof Error ? err.message : 'Failed to preview sort');
-    } finally {
-      setLoading(false);
     }
   }
 
   async function handleApply() {
     if (!previewResult) return;
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -183,14 +189,12 @@ export function Popup() {
       window.close();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to apply sort');
-    } finally {
-      setLoading(false);
     }
   }
 
   async function handleAutoDetect() {
-    setLoading(true);
     setError(null);
+    setUnloadedWarning(null);
 
     try {
       // First detect on the active tab only
@@ -239,8 +243,6 @@ export function Popup() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Auto-detection failed');
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -311,6 +313,30 @@ export function Popup() {
     }
   }
 
+  async function handleLoadUnloadedTabs() {
+    setLoadingTabs(true);
+    setError(null);
+    setUnloadedWarning(null);
+
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: 'LOAD_UNLOADED_TABS',
+        urlRegex: urlRegex || undefined
+      });
+
+      if (result.success) {
+        setUnloadedWarning(`${result.message}. You can now preview to sort all tabs.`);
+        setUnloadedTabCount(0);
+      } else {
+        setError(result.message);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load tabs');
+    } finally {
+      setLoadingTabs(false);
+    }
+  }
+
   async function handleClearForm() {
     setUrlRegex('');
     setSelector('');
@@ -319,6 +345,8 @@ export function Popup() {
     setPreviewResult(null);
     setError(null);
     setTestResult(null);
+    setUnloadedWarning(null);
+    setUnloadedTabCount(0);
     // Clear saved state and preview
     await chrome.storage.local.remove([POPUP_STATE_KEY, PREVIEW_RESULT_KEY]);
   }
@@ -368,10 +396,9 @@ export function Popup() {
           <button
             onClick={handleAutoDetect}
             className="btn btn-secondary"
-            disabled={loading}
             title="Automatically detect common fields (ratings, prices, dates)"
           >
-            {loading ? 'Detecting...' : 'Auto-Detect'}
+            Auto-Detect
           </button>
         </div>
 
@@ -429,19 +456,33 @@ export function Popup() {
           </div>
         )}
 
+        {unloadedWarning && (
+          <div className="warning-message">
+            {unloadedWarning}
+            {unloadedTabCount > 0 && (
+              <button
+                onClick={handleLoadUnloadedTabs}
+                className="btn btn-load-tabs"
+                disabled={loadingTabs}
+                style={{ marginLeft: '12px' }}
+              >
+                {loadingTabs ? 'Loading Tabs...' : 'Load All Tabs'}
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="button-group">
           <button
             onClick={handlePreview}
             className="btn btn-primary"
-            disabled={loading}
           >
-            {loading ? 'Loading...' : 'Preview'}
+            Preview
           </button>
           {previewResult && (
             <button
               onClick={handleApply}
               className="btn btn-success"
-              disabled={loading}
             >
               Apply Sort
             </button>

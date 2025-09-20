@@ -44,17 +44,25 @@ function generateSelector(element: Element): string {
   const parts: string[] = [];
   let current: Element | null = element;
 
+  // Helper to escape CSS selector special characters
+  const escapeSelector = (str: string): string => {
+    return str.replace(/([!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+  };
+
   while (current && current !== document.body) {
     let selector = current.tagName.toLowerCase();
 
     if (current.id) {
-      selector = `#${current.id}`;
+      // Escape the ID to handle special characters
+      const escapedId = CSS.escape(current.id);
+      selector = `#${escapedId}`;
       parts.unshift(selector);
       break;
     }
 
     const classes = Array.from(current.classList)
       .filter(cls => !cls.includes(':') && /^[a-zA-Z]/.test(cls))
+      .map(cls => CSS.escape(cls))
       .slice(0, 2);
 
     if (classes.length > 0) {
@@ -99,7 +107,9 @@ function generateSelector(element: Element): string {
   for (const attr of uniqueAttributes) {
     const value = element.getAttribute(attr);
     if (value) {
-      const selector = `${element.tagName.toLowerCase()}[${attr}="${value}"]`;
+      // Escape attribute value for use in selector
+      const escapedValue = value.replace(/"/g, '\\"');
+      const selector = `${element.tagName.toLowerCase()}[${attr}="${escapedValue}"]`;
       try {
         const matches = document.querySelectorAll(selector);
         if (matches.length === 1 && matches[0] === element) {

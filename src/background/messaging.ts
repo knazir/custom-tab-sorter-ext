@@ -19,6 +19,16 @@ export async function extractValueFromTab(
   attribute?: string,
   parseAs?: string
 ): Promise<ExtractedValue> {
+  // Check if tab is loaded
+  const tab = await chrome.tabs.get(tabId);
+  if (tab.status === 'unloaded' || tab.discarded) {
+    return {
+      tabId,
+      value: null,
+      diagnostics: { notes: 'Tab not loaded (discarded)' }
+    };
+  }
+
   const injected = await injectContentScript(tabId);
 
   if (!injected) {
@@ -53,6 +63,16 @@ export async function extractValueFromTab(
 export async function autoDetectValueFromTab(
   tabId: number
 ): Promise<ExtractedValue> {
+  // Check if tab is loaded
+  const tab = await chrome.tabs.get(tabId);
+  if (tab.status === 'unloaded' || tab.discarded) {
+    return {
+      tabId,
+      value: null,
+      diagnostics: { notes: 'Tab not loaded (discarded)' }
+    };
+  }
+
   const injected = await injectContentScript(tabId);
 
   if (!injected) {
