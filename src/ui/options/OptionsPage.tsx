@@ -141,19 +141,6 @@ export function OptionsPage() {
 
           <div className="setting-row">
             <label>
-              Default Scope:
-              <select
-                value={settings.scope}
-                onChange={(e) => saveSettings({ ...settings, scope: e.target.value as 'currentWindow' | 'allWindows' })}
-              >
-                <option value="currentWindow">Current Window</option>
-                <option value="allWindows">All Windows</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="setting-row">
-            <label>
               <input
                 type="checkbox"
                 checked={settings.keepPinnedStatic}

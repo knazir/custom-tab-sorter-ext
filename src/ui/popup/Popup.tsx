@@ -1,11 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, SortKey, SortResult, Scope } from '../../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Settings, SortKey, SortResult } from '../../types';
 import { ListView } from '../components/ListView';
 import './popup.css';
 
+interface PopupState {
+  urlRegex: string;
+  selector: string;
+  parseAs: 'text' | 'number' | 'price' | 'date';
+  direction: 'asc' | 'desc';
+}
+
+const POPUP_STATE_KEY = 'popupFormState';
+const PREVIEW_RESULT_KEY = 'previewResult';
+
 export function Popup() {
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [scope, setScope] = useState<Scope>('currentWindow');
   const [urlRegex, setUrlRegex] = useState('');
   const [selector, setSelector] = useState('');
   const [parseAs, setParseAs] = useState<'text' | 'number' | 'price' | 'date'>('text');
@@ -13,15 +22,107 @@ export function Popup() {
   const [previewResult, setPreviewResult] = useState<SortResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
 
+  // Save state to storage whenever form values change
+  const savePopupState = useCallback(async () => {
+    const state: PopupState = {
+      urlRegex,
+      selector,
+      parseAs,
+      direction
+    };
+    await chrome.storage.local.set({ [POPUP_STATE_KEY]: state });
+  }, [urlRegex, selector, parseAs, direction]);
+
+  // Load saved state on mount
   useEffect(() => {
     loadSettings();
+    loadPopupState();
+    loadPreviewResult();
+    // Delay context menu check to allow other state to settle
+    setTimeout(() => {
+      checkForContextMenuData();
+    }, 100);
   }, []);
+
+  // Save state whenever form values change
+  useEffect(() => {
+    savePopupState();
+  }, [savePopupState]);
+
+  async function loadPopupState() {
+    const stored = await chrome.storage.local.get(POPUP_STATE_KEY);
+    if (stored[POPUP_STATE_KEY]) {
+      const state = stored[POPUP_STATE_KEY] as PopupState;
+      setUrlRegex(state.urlRegex);
+      setSelector(state.selector);
+      setParseAs(state.parseAs);
+      setDirection(state.direction);
+    }
+  }
+
+  async function loadPreviewResult() {
+    const stored = await chrome.storage.local.get(PREVIEW_RESULT_KEY);
+    if (stored[PREVIEW_RESULT_KEY]) {
+      setPreviewResult(stored[PREVIEW_RESULT_KEY] as SortResult);
+    }
+  }
+
+  async function savePreviewResult(result: SortResult | null) {
+    if (result) {
+      await chrome.storage.local.set({ [PREVIEW_RESULT_KEY]: result });
+    } else {
+      await chrome.storage.local.remove(PREVIEW_RESULT_KEY);
+    }
+  }
+
+  async function checkForContextMenuData() {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_CONTEXT_DATA' });
+
+    if (response && response.selector) {
+      // Context menu data is available - auto-fill the form
+      setSelector(response.selector);
+      setUrlRegex(response.urlRegex || '');
+
+      // Try to guess the parse type based on the value
+      if (response.value) {
+        const value = String(response.value).trim();
+
+        // Check if it looks like a number
+        if (/^\d+(\.\d+)?$/.test(value)) {
+          setParseAs('number');
+        }
+        // Check if it looks like a price
+        else if (/[\$£€¥]/.test(value) || /\d+[.,]\d{2}/.test(value)) {
+          setParseAs('price');
+        }
+        // Check if it might be a date
+        else if (/\d{4}-\d{2}-\d{2}/.test(value) || /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(value)) {
+          setParseAs('date');
+        }
+        // Default to text
+        else {
+          setParseAs('text');
+        }
+      }
+
+      // Clear the context data after using it
+      await chrome.runtime.sendMessage({ type: 'CLEAR_CONTEXT_DATA' });
+
+      // Clear the badge
+      chrome.action.setBadgeText({ text: '' });
+
+      // Show a subtle indicator that data was loaded from context menu
+      setError(null);
+      // Note: Auto-preview will happen after state updates
+    }
+  }
 
   async function loadSettings() {
     const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
     setSettings(response);
-    setScope(response.scope);
   }
 
   async function handlePreview() {
@@ -39,13 +140,13 @@ export function Popup() {
 
       const result = await chrome.runtime.sendMessage({
         type: 'PREVIEW_SORT',
-        scope,
         urlRegex: urlRegex || undefined,
         sortKeys: [sortKey],
         missingValuePolicy: settings?.missingValuePolicy || 'last'
       });
 
       setPreviewResult(result);
+      await savePreviewResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to preview sort');
     } finally {
@@ -70,12 +171,14 @@ export function Popup() {
 
       await chrome.runtime.sendMessage({
         type: 'SORT_TABS',
-        scope,
         urlRegex: urlRegex || undefined,
         sortKeys: [sortKey],
         keepPinnedStatic: settings?.keepPinnedStatic !== false,
         missingValuePolicy: settings?.missingValuePolicy || 'last'
       });
+
+      // Clear preview after successful apply (tabs are now sorted)
+      await chrome.storage.local.remove(PREVIEW_RESULT_KEY);
 
       window.close();
     } catch (err) {
@@ -86,8 +189,138 @@ export function Popup() {
   }
 
   async function handleAutoDetect() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // First detect on the active tab only
+      const detection = await chrome.runtime.sendMessage({
+        type: 'AUTO_DETECT_ACTIVE_TAB'
+      });
+
+      if (!detection.success) {
+        setError(detection.error || 'No suitable field found on this page');
+        setLoading(false);
+        return;
+      }
+
+      // Use the detected selector (if available) or keep empty for auto-detect
+      const detectedSelector = detection.diagnostics?.selector || '';
+      setSelector(detectedSelector);
+
+      // Set the parse type based on what was detected
+      if (detection.parseAs) {
+        setParseAs(detection.parseAs as any);
+      }
+
+      // Now preview with the detected settings
+      const sortKey: SortKey = {
+        id: 'auto-detect',
+        label: 'Auto Detection',
+        selector: detectedSelector || undefined,
+        parseAs: detection.parseAs || parseAs,
+        direction
+      };
+
+      const result = await chrome.runtime.sendMessage({
+        type: 'PREVIEW_SORT',
+        urlRegex: urlRegex || undefined,
+        sortKeys: [sortKey],
+        missingValuePolicy: settings?.missingValuePolicy || 'last'
+      });
+
+      setPreviewResult(result);
+      await savePreviewResult(result);
+
+      // Show what was detected
+      if (detection.diagnostics?.rule) {
+        setError(null); // Clear any error
+        // Could show a success message here if desired
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Auto-detection failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleTestSelector() {
+    if (!selector) {
+      setTestResult('Please enter a CSS selector to test');
+      return;
+    }
+
+    setTestLoading(true);
+    setTestResult(null);
+
+    try {
+      // Get the active tab
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+      if (!activeTab || !activeTab.id) {
+        setTestResult('No active tab found');
+        setTestLoading(false);
+        return;
+      }
+
+      // Ask background script to test the selector
+      const response = await chrome.runtime.sendMessage({
+        type: 'TEST_SELECTOR',
+        tabId: activeTab.id,
+        selector,
+        parseAs
+      });
+
+      if (response && response.value !== null && response.value !== undefined) {
+        const value = response.value;
+        const parsed = parseValue(value, parseAs);
+        // Only add quotes for text type
+        const displayParsed = parseAs === 'text' ? `"${parsed}"` : parsed;
+        setTestResult(`Raw: "${value}"\nParsed as ${parseAs}: ${displayParsed}`);
+      } else {
+        setTestResult('No element found with this selector');
+      }
+    } catch (err) {
+      setTestResult('Error: ' + (err instanceof Error ? err.message : 'Failed to test selector'));
+    } finally {
+      setTestLoading(false);
+    }
+  }
+
+  function parseValue(value: any, type: string): string {
+    if (value === null || value === undefined) return 'null';
+
+    const stringValue = String(value).trim();
+
+    switch (type) {
+      case 'number':
+        const numMatch = stringValue.match(/[\d.]+/);
+        return numMatch ? numMatch[0] : 'NaN';
+
+      case 'price':
+        const cleaned = stringValue.replace(/[^0-9.,]/g, '').replace(',', '');
+        const price = parseFloat(cleaned);
+        return isNaN(price) ? 'NaN' : price.toFixed(2);
+
+      case 'date':
+        const date = new Date(stringValue);
+        return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleDateString();
+
+      default:
+        return stringValue.toLowerCase();
+    }
+  }
+
+  async function handleClearForm() {
+    setUrlRegex('');
     setSelector('');
-    await handlePreview();
+    setParseAs('text');
+    setDirection('asc');
+    setPreviewResult(null);
+    setError(null);
+    setTestResult(null);
+    // Clear saved state and preview
+    await chrome.storage.local.remove([POPUP_STATE_KEY, PREVIEW_RESULT_KEY]);
   }
 
   if (!settings) {
@@ -98,23 +331,16 @@ export function Popup() {
     <div className="popup-container">
       <header className="popup-header">
         <h1>Tab Sorter</h1>
+        <button
+          onClick={handleClearForm}
+          className="btn-clear"
+          title="Clear form"
+        >
+          Clear
+        </button>
       </header>
 
       <div className="popup-content">
-        <div className="form-section">
-          <label className="form-label">
-            Scope:
-            <select
-              value={scope}
-              onChange={(e) => setScope(e.target.value as Scope)}
-              className="form-select"
-            >
-              <option value="currentWindow">Current Window</option>
-              <option value="allWindows">All Windows</option>
-            </select>
-          </label>
-        </div>
-
         <div className="form-section">
           <label className="form-label">
             URL Filter (regex):
@@ -143,8 +369,9 @@ export function Popup() {
             onClick={handleAutoDetect}
             className="btn btn-secondary"
             disabled={loading}
+            title="Automatically detect common fields (ratings, prices, dates)"
           >
-            Auto-Detect
+            {loading ? 'Detecting...' : 'Auto-Detect'}
           </button>
         </div>
 
@@ -163,6 +390,24 @@ export function Popup() {
             </select>
           </label>
         </div>
+
+        {selector && (
+          <div className="form-section">
+            <button
+              onClick={handleTestSelector}
+              className="btn btn-test"
+              disabled={testLoading}
+              title="Test the selector on the active tab"
+            >
+              {testLoading ? 'Testing...' : 'Test'}
+            </button>
+            {testResult && (
+              <div className="test-result">
+                <pre>{testResult}</pre>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="form-section">
           <label className="form-label">

@@ -33,7 +33,7 @@ function extractValue(
         tabId: -1,
         value: null,
         diagnostics: {
-          notes: `No element found for selector: ${selector}`
+          notes: `Element not found`
         }
       };
     }
@@ -118,7 +118,8 @@ function detectRating(): ExtractedValue | null {
             confidence: 0.9,
             diagnostics: {
               rule: 'Rating detection',
-              parsed: value
+              parsed: value,
+              selector: selector  // Include the selector that worked
             }
           };
         }

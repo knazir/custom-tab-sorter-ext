@@ -109,7 +109,25 @@
 }
 
 .error-item {
+  margin-bottom: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.error-item:hover {
+  background-color: rgba(220, 38, 38, 0.1);
+}
+
+.error-text {
   font-size: 11px;
   color: #dc2626;
-  margin-bottom: 4px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.error-text strong {
+  color: #991b1b;
+  font-weight: 600;
 }

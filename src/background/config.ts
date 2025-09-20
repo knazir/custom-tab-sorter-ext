@@ -1,7 +1,6 @@
 import { Settings, SiteProfile } from '../types';
 
 export const DEFAULT_SETTINGS: Settings = {
-  scope: 'currentWindow',
   keepPinnedStatic: true,
   missingValuePolicy: 'last',
   siteProfiles: [],

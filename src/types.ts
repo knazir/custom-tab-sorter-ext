@@ -1,5 +1,3 @@
-export type Scope = "currentWindow" | "allWindows";
-
 export type SiteProfile = {
   id: string;
   label: string;
@@ -20,7 +18,6 @@ export type SortKey = {
 };
 
 export type Settings = {
-  scope: Scope;
   urlRegex?: string;
   keepPinnedStatic: boolean;
   missingValuePolicy: "last" | "first" | "error";
@@ -53,7 +50,12 @@ export type TabInfo = {
 
 export type SortResult = {
   tabs: Array<TabInfo & { extractedValue?: any }>;
-  errors: Array<{ tabId: number; error: string }>;
+  errors: Array<{
+    tabId: number;
+    error: string;
+    tabTitle?: string;
+    tabUrl?: string;
+  }>;
 };
 
 export type MessageType =

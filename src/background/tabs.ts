@@ -1,21 +1,23 @@
-import { Scope, TabInfo } from '../types';
+import { TabInfo } from '../types';
 
 export async function getTargetTabs(
-  scope: Scope,
   urlRegex?: string
 ): Promise<TabInfo[]> {
-  const queryOptions: chrome.tabs.QueryInfo = {};
-
-  if (scope === 'currentWindow') {
-    queryOptions.currentWindow = true;
-  }
+  const queryOptions: chrome.tabs.QueryInfo = {
+    currentWindow: true
+  };
 
   const tabs = await chrome.tabs.query(queryOptions);
 
   let filteredTabs = tabs.filter(tab =>
     tab.id !== undefined &&
     tab.url !== undefined &&
-    !tab.url.startsWith('chrome://')
+    !tab.url.startsWith('chrome://') &&
+    !tab.url.startsWith('chrome-extension://') &&
+    !tab.url.startsWith('edge://') &&
+    !tab.url.startsWith('about:') &&
+    !tab.url.startsWith('file://') &&  // Local files may need explicit permission
+    !tab.url.includes('chrome.google.com/webstore')  // Chrome Web Store is protected
   );
 
   if (urlRegex) {

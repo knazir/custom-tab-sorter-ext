@@ -4,7 +4,12 @@ import './listview.css';
 
 interface ListViewProps {
   tabs: Array<TabInfo & { extractedValue?: any }>;
-  errors: Array<{ tabId: number; error: string }>;
+  errors: Array<{
+    tabId: number;
+    error: string;
+    tabTitle?: string;
+    tabUrl?: string;
+  }>;
   onTabClick?: (tabId: number) => void;
 }
 
@@ -42,11 +47,26 @@ export function ListView({ tabs, errors, onTabClick }: ListViewProps) {
       {errors.length > 0 && (
         <div className="error-list">
           <h4>Extraction Errors ({errors.length})</h4>
-          {errors.map(error => (
-            <div key={error.tabId} className="error-item">
-              Tab {error.tabId}: {error.error}
-            </div>
-          ))}
+          {errors.map(error => {
+            const displayName = error.tabTitle
+              ? error.tabTitle.substring(0, 50) + (error.tabTitle.length > 50 ? '...' : '')
+              : error.tabUrl
+              ? new URL(error.tabUrl).hostname
+              : `Tab ${error.tabId}`;
+
+            return (
+              <div
+                key={`${error.tabId}-${error.tabUrl}`}
+                className="error-item"
+                onClick={() => onTabClick?.(error.tabId)}
+                style={{ cursor: onTabClick ? 'pointer' : 'default' }}
+              >
+                <div className="error-text">
+                  <strong>{displayName}:</strong> {error.error}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -19,7 +19,15 @@ export async function extractValueFromTab(
   attribute?: string,
   parseAs?: string
 ): Promise<ExtractedValue> {
-  await injectContentScript(tabId);
+  const injected = await injectContentScript(tabId);
+
+  if (!injected) {
+    return {
+      tabId,
+      value: null,
+      diagnostics: { notes: 'Protected page' }
+    };
+  }
 
   const response = await sendMessageToTab(tabId, {
     type: 'EXTRACT_VALUE',
@@ -36,13 +44,24 @@ export async function extractValueFromTab(
     };
   }
 
-  return response as ExtractedValue;
+  // Ensure the tabId is set correctly
+  const extractedValue = response as ExtractedValue;
+  extractedValue.tabId = tabId;
+  return extractedValue;
 }
 
 export async function autoDetectValueFromTab(
   tabId: number
 ): Promise<ExtractedValue> {
-  await injectContentScript(tabId);
+  const injected = await injectContentScript(tabId);
+
+  if (!injected) {
+    return {
+      tabId,
+      value: null,
+      diagnostics: { notes: 'Protected page' }
+    };
+  }
 
   const response = await sendMessageToTab(tabId, {
     type: 'AUTO_DETECT'
@@ -56,11 +75,28 @@ export async function autoDetectValueFromTab(
     };
   }
 
-  return response as ExtractedValue;
+  // Ensure the tabId is set correctly
+  const extractedValue = response as ExtractedValue;
+  extractedValue.tabId = tabId;
+  return extractedValue;
 }
 
-export async function injectContentScript(tabId: number): Promise<void> {
+export async function injectContentScript(tabId: number): Promise<boolean> {
   try {
+    // Check if we can access the tab first
+    const tab = await chrome.tabs.get(tabId);
+
+    // Skip protected URLs
+    if (!tab.url ||
+        tab.url.startsWith('chrome://') ||
+        tab.url.startsWith('chrome-extension://') ||
+        tab.url.startsWith('edge://') ||
+        tab.url.startsWith('about:') ||
+        tab.url.includes('chrome.google.com/webstore')) {
+      console.log(`Skipping protected tab ${tabId}: ${tab.url}`);
+      return false;
+    }
+
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['dist/content/extractor.js']
@@ -70,7 +106,10 @@ export async function injectContentScript(tabId: number): Promise<void> {
       target: { tabId },
       files: ['dist/content/context-target.js']
     });
+
+    return true;
   } catch (error) {
-    console.error(`Failed to inject content script into tab ${tabId}:`, error);
+    console.warn(`Cannot access tab ${tabId}:`, error);
+    return false;
   }
 }
