@@ -156,7 +156,6 @@ export function Popup() {
   }
 
   async function handlePreview() {
-    console.log('=== POPUP: Starting preview ===');
     // Clear the old preview first to show visual feedback
     setPreviewResult(null);
     setError(null);
@@ -181,32 +180,25 @@ export function Popup() {
         missingValuePolicy: settings?.missingValuePolicy || 'last'
       };
 
-      console.log('POPUP: Sending preview message:', message);
 
       const result = await chrome.runtime.sendMessage(message);
 
-      console.log('POPUP: Received preview result:', result);
 
       if (result) {
-        console.log('POPUP: Setting preview result with', result.tabs?.length, 'tabs');
         setPreviewResult(result);
         await savePreviewResult(result);
       } else {
-        console.warn('POPUP: No result received from background');
         setError('No result received from background script');
       }
     } catch (err) {
-      console.error('POPUP: Error in handlePreview:', err);
       setError(err instanceof Error ? err.message : 'Failed to preview sort');
     } finally {
       setPreviewLoading(false);
     }
 
-    console.log('=== POPUP: Preview complete ===');
   }
 
   async function handleApply() {
-    console.log('=== POPUP: Starting apply ===');
 
     setError(null);
     setApplyLoading(true);
@@ -222,7 +214,6 @@ export function Popup() {
         direction
       };
 
-      console.log('POPUP: Sending SORT_TABS message');
       const response = await chrome.runtime.sendMessage({
         type: 'SORT_TABS',
         urlRegex: urlRegex || undefined,
@@ -231,18 +222,15 @@ export function Popup() {
         missingValuePolicy: settings?.missingValuePolicy || 'last'
       });
 
-      console.log('POPUP: Sort response:', response);
 
       if (response) {
         // Clear preview after successful apply (tabs are now sorted)
         await chrome.storage.local.remove(PREVIEW_RESULT_KEY);
-        console.log('POPUP: Tabs sorted successfully, closing popup');
         window.close();
       } else {
         setError('Failed to apply sort');
       }
     } catch (err) {
-      console.error('POPUP: Error in handleApply:', err);
       setError(err instanceof Error ? err.message : 'Failed to apply sort');
     } finally {
       setApplyLoading(false);

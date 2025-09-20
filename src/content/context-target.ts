@@ -100,7 +100,6 @@ function generateSelector(element: Element): string {
       return generatedSelector;
     }
   } catch (e) {
-    console.error('Invalid selector generated:', generatedSelector);
   }
 
   const uniqueAttributes = ['data-testid', 'data-id', 'aria-label', 'name'];

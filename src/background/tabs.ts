@@ -22,23 +22,13 @@ export async function getTargetTabs(
 
   if (urlRegex) {
     try {
-      console.log('Testing regex pattern:', urlRegex);
       const regex = new RegExp(urlRegex, 'i');
-      console.log('Regex created successfully:', regex);
 
       const beforeCount = filteredTabs.length;
       filteredTabs = filteredTabs.filter(tab => {
-        const matches = regex.test(tab.url!);
-        if (matches) {
-          console.log('✅ Matched:', tab.url);
-        } else {
-          console.log('❌ Not matched:', tab.url);
-        }
-        return matches;
+        return regex.test(tab.url!);
       });
-      console.log(`Filtered from ${beforeCount} to ${filteredTabs.length} tabs`);
     } catch (e) {
-      console.error('Invalid regex:', urlRegex, e);
     }
   }
 
@@ -58,7 +48,6 @@ export async function moveTabs(
   tabs: TabInfo[],
   keepPinnedStatic: boolean
 ): Promise<void> {
-  console.log(`[moveTabs] Moving ${tabs.length} tabs, keepPinnedStatic: ${keepPinnedStatic}`);
 
   const tabsByWindow = new Map<number, TabInfo[]>();
 
@@ -68,23 +57,18 @@ export async function moveTabs(
     tabsByWindow.set(tab.windowId, windowTabs);
   }
 
-  console.log(`[moveTabs] Tabs grouped into ${tabsByWindow.size} window(s)`);
 
   for (const [windowId, windowTabs] of tabsByWindow) {
-    console.log(`[moveTabs] Processing window ${windowId} with ${windowTabs.length} tabs`);
 
     const pinnedTabs = windowTabs.filter(t => t.pinned);
     const unpinnedTabs = windowTabs.filter(t => !t.pinned);
 
-    console.log(`[moveTabs] Window ${windowId}: ${pinnedTabs.length} pinned, ${unpinnedTabs.length} unpinned`);
 
     if (keepPinnedStatic) {
       // Start moving unpinned tabs after all pinned tabs
       let targetIndex = pinnedTabs.length;
-      console.log(`[moveTabs] Keeping pinned tabs static, starting at index ${targetIndex}`);
 
       for (const tab of unpinnedTabs) {
-        console.log(`[moveTabs] Moving tab ${tab.id} (${tab.title?.substring(0, 30)}) to index ${targetIndex}`);
         try {
           await chrome.tabs.move(tab.id, {
             windowId,
@@ -92,14 +76,12 @@ export async function moveTabs(
           });
           targetIndex++;
         } catch (error) {
-          console.error(`[moveTabs] Failed to move tab ${tab.id}:`, error);
         }
       }
     } else {
       // Move all tabs including pinned ones
       let targetIndex = 0;
       for (const tab of windowTabs) {
-        console.log(`[moveTabs] Moving tab ${tab.id} to index ${targetIndex}`);
         try {
           await chrome.tabs.move(tab.id, {
             windowId,
@@ -107,13 +89,11 @@ export async function moveTabs(
           });
           targetIndex++;
         } catch (error) {
-          console.error(`[moveTabs] Failed to move tab ${tab.id}:`, error);
         }
       }
     }
   }
 
-  console.log('[moveTabs] Tab movement complete');
 }
 
 export async function focusTab(tabId: number): Promise<void> {
@@ -142,7 +122,6 @@ export async function loadTab(tabId: number): Promise<boolean> {
       }, 10000);
     });
   } catch (error) {
-    console.error(`Failed to load tab ${tabId}:`, error);
     return false;
   }
 }

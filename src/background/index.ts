@@ -41,11 +41,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SORT_TABS') {
     handleSortRequest(message)
       .then(result => {
-        console.log('Sort completed successfully');
         sendResponse(result);
       })
       .catch(error => {
-        console.error('Error in sort request:', error);
         sendResponse({ tabs: [], errors: [{ error: String(error) }] });
       });
     return true;
@@ -54,11 +52,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'PREVIEW_SORT') {
     handlePreviewRequest(message)
       .then(result => {
-        console.log('Sending preview response:', result);
         sendResponse(result);
       })
       .catch(error => {
-        console.error('Error in preview request:', error);
         sendResponse({ tabs: [], errors: [{ error: String(error) }] });
       });
     return true;  // Will respond asynchronously
@@ -333,9 +329,7 @@ async function handleConfigureSort(tabId: number, tabUrl: string) {
 }
 
 async function handleSortRequest(message: any): Promise<SortResult> {
-  console.log('=== SORT REQUEST START (Apply) ===');
   const { urlRegex, sortKeys, keepPinnedStatic, missingValuePolicy } = message;
-  console.log('Sort params:', { urlRegex, sortKeys, keepPinnedStatic, missingValuePolicy });
 
   try {
     const result = await performSort(
@@ -344,31 +338,23 @@ async function handleSortRequest(message: any): Promise<SortResult> {
       keepPinnedStatic,
       missingValuePolicy
     );
-    console.log('=== SORT REQUEST COMPLETE ===');
     return result;
   } catch (error) {
-    console.error('Error in handleSortRequest:', error);
     throw error;
   }
 }
 
 async function handlePreviewRequest(message: any): Promise<SortResult> {
-  console.log('=== PREVIEW REQUEST START ===');
   const { urlRegex, sortKeys, missingValuePolicy } = message;
-  console.log('Preview params:', { urlRegex, sortKeys, missingValuePolicy });
 
   try {
     const tabs = await getTargetTabs(urlRegex);
-    console.log(`Found ${tabs.length} matching tabs`);
 
     if (tabs.length === 0) {
-      console.warn('No tabs matched the filter!');
       return { tabs: [], errors: [] };
     }
 
-    console.log('Starting extraction...');
     const extractedValues = await extractValuesFromTabs(tabs, sortKeys[0]);
-    console.log(`Extraction complete. Got ${extractedValues.length} values`);
 
     const tabsWithValues: TabWithValue[] = tabs.map(tab => {
       const extracted = extractedValues.find(e => e.tabId === tab.id);
@@ -380,14 +366,10 @@ async function handlePreviewRequest(message: any): Promise<SortResult> {
     });
 
     const validCount = tabsWithValues.filter(t => t.extractedValue !== null).length;
-    console.log(`${validCount} tabs have valid values`);
 
-    console.log('Creating comparator...');
     const comparator = createComparator(sortKeys, missingValuePolicy);
 
-    console.log('Sorting tabs...');
     const sortedTabs = stableSort(tabsWithValues, comparator);
-    console.log(`Sorted ${sortedTabs.length} tabs`);
 
     const errors = extractedValues
       .filter(e => e.value === null)
@@ -401,14 +383,10 @@ async function handlePreviewRequest(message: any): Promise<SortResult> {
         };
       });
 
-    console.log(`Found ${errors.length} errors`);
-    console.log('=== PREVIEW REQUEST END ===');
 
     const result = { tabs: sortedTabs, errors };
-    console.log(`Returning result with ${result.tabs.length} tabs and ${result.errors.length} errors`);
     return result;
   } catch (error) {
-    console.error('Error in handlePreviewRequest:', error);
     // Return a valid result even on error
     return {
       tabs: [],
@@ -428,13 +406,9 @@ async function performSort(
   keepPinnedStatic: boolean,
   missingValuePolicy: 'last' | 'first' | 'error'
 ): Promise<SortResult> {
-  console.log('performSort: Getting target tabs...');
   const tabs = await getTargetTabs(urlRegex);
-  console.log(`performSort: Found ${tabs.length} tabs`);
 
-  console.log('performSort: Extracting values...');
   const extractedValues = await extractValuesFromTabs(tabs, sortKeys[0]);
-  console.log(`performSort: Extracted ${extractedValues.length} values`);
 
   const tabsWithValues: TabWithValue[] = tabs.map(tab => {
     const extracted = extractedValues.find(e => e.tabId === tab.id);
@@ -445,14 +419,10 @@ async function performSort(
     };
   });
 
-  console.log('performSort: Creating comparator and sorting...');
   const comparator = createComparator(sortKeys, missingValuePolicy);
   const sortedTabs = stableSort(tabsWithValues, comparator);
-  console.log(`performSort: Sorted ${sortedTabs.length} tabs`);
 
-  console.log('performSort: Moving tabs to new positions...');
   await moveTabs(sortedTabs, keepPinnedStatic);
-  console.log('performSort: Tab movement complete');
 
   const errors = extractedValues
     .filter(e => e.value === null)
@@ -466,7 +436,6 @@ async function performSort(
       };
     });
 
-  console.log(`performSort: Complete with ${errors.length} errors`);
   return { tabs: sortedTabs, errors };
 }
 
@@ -474,12 +443,10 @@ async function extractValuesFromTabs(
   tabs: { id: number }[],
   sortKey: SortKey
 ): Promise<ExtractedValue[]> {
-  console.log(`Extracting values from ${tabs.length} tabs with sortKey:`, sortKey);
 
   // Create promises for each tab with individual timeout
   const promises = tabs.map(async (tab) => {
     if (!sortKey.selector) {
-      console.log(`No selector for tab ${tab.id}`);
       return {
         tabId: tab.id,
         value: null,
@@ -487,7 +454,6 @@ async function extractValuesFromTabs(
       };
     }
 
-    console.log(`Extracting from tab ${tab.id} with selector: ${sortKey.selector}`);
 
     // Add timeout to individual extraction
     const timeoutPromise = new Promise<ExtractedValue>((_, reject) =>
@@ -508,11 +474,6 @@ async function extractValuesFromTabs(
       const errorMessage = String(error);
       const isTimeout = errorMessage.includes('timeout');
 
-      if (isTimeout) {
-        console.log(`Tab ${tab.id} extraction timed out after 5s, treating as null value`);
-      } else {
-        console.warn(`Tab ${tab.id} extraction failed:`, error);
-      }
 
       return {
         tabId: tab.id,
@@ -524,7 +485,6 @@ async function extractValuesFromTabs(
     }
   });
 
-  console.log('Waiting for all extractions to complete...');
 
   try {
     // Add global timeout for all promises (20 seconds for large numbers of tabs)
@@ -536,7 +496,6 @@ async function extractValuesFromTabs(
     ]);
 
     const results = await allPromisesWithTimeout;
-    console.log(`Promise.allSettled completed with ${results.length} results`);
 
     let successCount = 0;
     let timeoutCount = 0;
@@ -547,7 +506,6 @@ async function extractValuesFromTabs(
         const value = result.value;
         if (value?.value !== null && value?.value !== undefined) {
           successCount++;
-          console.log(`Tab ${tabs[index].id} succeeded with value:`, value.value);
         } else if (value?.diagnostics?.notes?.includes('timeout')) {
           timeoutCount++;
         } else {
@@ -556,7 +514,6 @@ async function extractValuesFromTabs(
         return value;
       } else {
         errorCount++;
-        console.log(`Tab ${tabs[index].id} promise rejected:`, result.reason);
         return {
           tabId: tabs[index].id,
           value: null,
@@ -567,13 +524,10 @@ async function extractValuesFromTabs(
       }
     });
 
-    console.log(`Extraction complete: ${successCount} successful, ${timeoutCount} timeouts, ${errorCount} errors`);
     return extractedValues;
   } catch (error) {
-    console.error('Critical error in extractValuesFromTabs:', error);
     // Return partial results on global timeout
     if (error instanceof Error && error.message.includes('timeout')) {
-      console.warn('Global extraction timeout after 20s, using null values for remaining tabs');
       return tabs.map(tab => ({
         tabId: tab.id,
         value: null,
