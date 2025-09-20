@@ -128,8 +128,12 @@ export function Popup() {
   }
 
   async function handlePreview() {
-    console.log('Preview button clicked');
+    // Clear the old preview first to show visual feedback
+    setPreviewResult(null);
     setError(null);
+
+    // Force a small delay to ensure UI updates
+    await new Promise(resolve => setTimeout(resolve, 10));
 
     try {
       const sortKey: SortKey = {
@@ -140,8 +144,6 @@ export function Popup() {
         direction
       };
 
-      console.log('Sending preview with sortKey:', sortKey);
-
       const result = await chrome.runtime.sendMessage({
         type: 'PREVIEW_SORT',
         urlRegex: urlRegex || undefined,
@@ -149,14 +151,11 @@ export function Popup() {
         missingValuePolicy: settings?.missingValuePolicy || 'last'
       });
 
-      console.log('Preview result:', result);
-
       if (result) {
         setPreviewResult(result);
         await savePreviewResult(result);
       }
     } catch (err) {
-      console.error('Preview error:', err);
       setError(err instanceof Error ? err.message : 'Failed to preview sort');
     }
   }
