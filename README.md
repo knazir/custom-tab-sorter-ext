@@ -10,7 +10,7 @@
 **Sort your browser tabs by any value extracted from the page content**
 *Prices, ratings, dates, or any custom field — all with a simple CSS selector*
 
-[🚀 Install](#installation) • [✨ Features](#features) • [📖 Usage](#usage) • [🎯 Examples](#examples) • [🛠️ Development](#development)
+[🚀 Install](#-installation) • [✨ Features](#-features) • [📖 Usage](#-usage) • [🎯 Examples](#-examples)
 
 <img src="icons/icon-header.png" width="128" height="128">
 
@@ -145,17 +145,6 @@ time[datetime]
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-### Development Guidelines
-- Write TypeScript with strong types
-- Follow existing code style
-- Add unit tests for new features
-- Update documentation as needed
-- Test across multiple websites
 
 ## 🐛 Known Issues
 
