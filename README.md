@@ -20,7 +20,7 @@
 
 ## 🎯 What is Tab Sorter?
 
-Tab Sorter is a powerful Chrome extension that lets you **organize your browser tabs based on actual content from the web pages**. Instead of just sorting by title or URL, you can extract and sort by any value visible on the page — product prices, ratings, dates, or any custom field you specify.
+Tab Sorter is a Chrome extension that lets you **organize your browser tabs based on actual content from the web pages**. Instead of just sorting by title or URL, you can extract and sort by any value visible on the page — product prices, ratings, dates, or any custom field you specify.
 
 ### Perfect for:
 - 🛍️ **Shopping** — Sort products by price across multiple stores
@@ -34,17 +34,13 @@ Tab Sorter is a powerful Chrome extension that lets you **organize your browser 
 ### Core Functionality
 - 🎨 **Custom CSS Selectors** — Extract any value from any website using standard CSS selectors
 - 🔄 **Flexible Sorting** — Sort ascending or descending by text, numbers, prices, or dates
-- 🌐 **Multi-Window Support** — Sort tabs in current window or across all windows
 - 🎯 **Smart Filtering** — Use regex patterns to sort only specific tabs
-- 👁️ **Preview Mode** — See sorted results before applying changes
-- 🌓 **Dark Mode** — Automatic theme detection with manual toggle
+- 👁️ **Preview Mode** — See sorted results before reordering tabs
+- 🌓 **Dark Mode** — Matches your system style or toggle between modes
 
 ### Advanced Features
-- 📌 **Pinned Tab Protection** — Keep pinned tabs in place while sorting others
 - 🔍 **Test Tools** — Test your selectors and regex patterns before sorting
-- 📝 **Form Persistence** — Your settings are saved between sessions
 - ⚡ **Right-Click Context Menu** — Select an element on any page to use as sort key
-- 🚫 **Graceful Error Handling** — Tabs that timeout or error are handled smoothly
 
 ## 📖 Usage
 
@@ -123,44 +119,6 @@ time[datetime]
 .homecardV2Price
 ```
 
-## 🛠️ Development
-
-### Prerequisites
-- Node.js 18+ and npm
-- Chrome browser for testing
-
-### Setup
-
-1. **Clone the repository**
-```bash
-git clone https://github.com/yourusername/tab-sorter-extension.git
-cd tab-sorter-extension
-```
-
-2. **Install dependencies**
-```bash
-npm install
-```
-
-3. **Build the extension**
-```bash
-npm run build
-```
-
-4. **Load in Chrome**
-   - Open `chrome://extensions/`
-   - Enable "Developer mode"
-   - Click "Load unpacked"
-   - Select the `dist` folder
-
-### Development Mode
-
-```bash
-npm run dev
-```
-
-This starts Vite in watch mode. Changes will auto-rebuild, but you'll need to reload the extension in Chrome.
-
 ### Project Structure
 
 ```
@@ -203,30 +161,4 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 - Some dynamically loaded content may require a page refresh before sorting
 - Heavily JavaScript-rendered sites may need special handling
-- Tab groups are preserved but not reordered as units (planned feature)
-
-## 🚀 Roadmap
-
-- [ ] Save and load sorting profiles
-- [ ] Keyboard shortcuts for common operations
-- [ ] Multi-level sorting (primary, secondary keys)
-- [ ] Support for XPath selectors
-- [ ] Export sorted list as CSV/JSON
-- [ ] Tab grouping based on extracted values
-- [ ] Firefox compatibility
-
-## 💬 Support
-
-- [Report a bug](https://github.com/yourusername/tab-sorter-extension/issues)
-- [Request a feature](https://github.com/yourusername/tab-sorter-extension/issues)
-- [View documentation](https://github.com/yourusername/tab-sorter-extension/wiki)
-
----
-
-<div align="center">
-
-Made with ❤️ by developers who have too many tabs open
-
-**[⬆ Back to Top](#-tab-sorter--smart-dom-based-tab-organization)**
-
-</div>
+- Questionable support for tab groups

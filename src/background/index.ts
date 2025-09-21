@@ -16,7 +16,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'auto-sort-by-element',
     parentId: 'tab-sorter-parent',
-    title: '⚡ Quick sort by this value',
+    title: 'Quick sort by this value',
     contexts: ['page', 'selection', 'link', 'image']
   });
 
@@ -24,7 +24,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'configure-sort-by-element',
     parentId: 'tab-sorter-parent',
-    title: '⚙️ Configure sort with this field...',
+    title: 'Configure sort with this field...',
     contexts: ['page', 'selection', 'link', 'image']
   });
 });
