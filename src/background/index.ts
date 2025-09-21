@@ -1,218 +1,71 @@
-import { getSettings, saveSettings } from './config';
-import { getTargetTabs, moveTabs, focusTab, getUnloadedTabs } from './tabs';
-import { createComparator, stableSort, TabWithValue } from './sorting';
-import { extractValueFromTab, injectContentScript } from './messaging';
-import { Settings, SortKey, SortResult, ExtractedValue } from '../types';
+import { getSettings } from './config';
+import { injectContentScript } from './messaging';
+import { SortKey } from '../types';
+import { RuntimeMessage, ContextMenuData } from '../types/messages';
+import { handleMessage } from './messageHandlers';
+import { performSort } from './sortOperations';
+import { CONTEXT_MENU_IDS, BADGE, TIMEOUTS, STORAGE_KEYS } from '../config/constants';
+import { detectParseType } from '../utils/parsing';
+import { logError } from '../utils/errors';
 
 chrome.runtime.onInstalled.addListener(() => {
   // Create parent menu
   chrome.contextMenus.create({
-    id: 'tab-sorter-parent',
+    id: CONTEXT_MENU_IDS.PARENT,
     title: 'Tab Sorter',
     contexts: ['page', 'selection', 'link', 'image']
   });
 
   // Auto sort option
   chrome.contextMenus.create({
-    id: 'auto-sort-by-element',
-    parentId: 'tab-sorter-parent',
+    id: CONTEXT_MENU_IDS.AUTO_SORT,
+    parentId: CONTEXT_MENU_IDS.PARENT,
     title: 'Quick sort by this value',
     contexts: ['page', 'selection', 'link', 'image']
   });
 
   // Configure in popup option
   chrome.contextMenus.create({
-    id: 'configure-sort-by-element',
-    parentId: 'tab-sorter-parent',
+    id: CONTEXT_MENU_IDS.CONFIGURE_SORT,
+    parentId: CONTEXT_MENU_IDS.PARENT,
     title: 'Configure sort with this field...',
     contexts: ['page', 'selection', 'link', 'image']
   });
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === 'auto-sort-by-element' && tab?.id && tab?.url) {
+  if (info.menuItemId === CONTEXT_MENU_IDS.AUTO_SORT && tab?.id && tab?.url) {
     await handleAutoSort(tab.id, tab.url);
-  } else if (info.menuItemId === 'configure-sort-by-element' && tab?.id && tab?.url) {
+  } else if (info.menuItemId === CONTEXT_MENU_IDS.CONFIGURE_SORT && tab?.id && tab?.url) {
     await handleConfigureSort(tab.id, tab.url);
   }
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'SORT_TABS') {
-    handleSortRequest(message)
-      .then(result => {
-        sendResponse(result);
-      })
-      .catch(error => {
-        sendResponse({ tabs: [], errors: [{ error: String(error) }] });
-      });
-    return true;
-  }
-
-  if (message.type === 'PREVIEW_SORT') {
-    handlePreviewRequest(message)
-      .then(result => {
-        sendResponse(result);
-      })
-      .catch(error => {
-        sendResponse({ tabs: [], errors: [{ error: String(error) }] });
-      });
-    return true;  // Will respond asynchronously
-  }
-
-  if (message.type === 'FOCUS_TAB') {
-    focusTab(message.tabId).then(() => sendResponse({ success: true }));
-    return true;
-  }
-
-  if (message.type === 'GET_SETTINGS') {
-    getSettings().then(sendResponse);
-    return true;
-  }
-
-  if (message.type === 'SAVE_SETTINGS') {
-    saveSettings(message.settings).then(() => sendResponse({ success: true }));
-    return true;
-  }
-
-  if (message.type === 'GET_CONTEXT_DATA') {
-    chrome.storage.local.get('contextMenuData').then((data) => {
-      sendResponse(data.contextMenuData || null);
-    });
-    return true;
-  }
-
-  if (message.type === 'CLEAR_CONTEXT_DATA') {
-    chrome.storage.local.remove('contextMenuData').then(() => {
-      sendResponse({ success: true });
-    });
-    return true;
-  }
-
-  if (message.type === 'TEST_REGEX') {
-    handleTestRegex(message.urlRegex).then(sendResponse);
-    return true;
-  }
-
-  if (message.type === 'TEST_SELECTOR') {
-    handleTestSelector(message.tabId, message.selector, message.parseAs).then(sendResponse);
-    return true;
-  }
-
-  if (message.type === 'CHECK_UNLOADED_TABS') {
-    handleCheckUnloadedTabs(message.urlRegex).then(sendResponse);
-    return true;
-  }
-
-  if (message.type === 'LOAD_UNLOADED_TABS') {
-    handleLoadUnloadedTabs(message.urlRegex).then(sendResponse);
-    return true;
-  }
-
-  return false;
+chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
+  // Use centralized message handler
+  handleMessage(message, sendResponse);
+  return true; // Always return true for async response
 });
 
-async function handleTestSelector(tabId: number, selector: string, parseAs?: string) {
-  const result = await extractValueFromTab(tabId, selector, undefined, parseAs);
-  return result;
-}
+// Helper functions for UI interactions
 
-async function handleTestRegex(urlRegex?: string) {
-  // Test which tabs match the regex pattern
-  const tabs = await getTargetTabs(urlRegex);
-  return tabs.map(tab => ({
-    id: tab.id,
-    title: tab.title,
-    url: tab.url,
-    favIconUrl: tab.favIconUrl
-  }));
-}
+function setBadge(config: typeof BADGE[keyof typeof BADGE], duration?: number) {
+  chrome.action.setBadgeText({ text: config.text });
+  chrome.action.setBadgeBackgroundColor({ color: config.color });
 
-async function handleCheckUnloadedTabs(urlRegex?: string) {
-  const tabs = await getTargetTabs(urlRegex);
-  const unloadedTabIds = await getUnloadedTabs(tabs);
-
-  if (unloadedTabIds.length > 0) {
-    const unloadedTabs = tabs.filter(t => unloadedTabIds.includes(t.id));
-    return {
-      hasUnloaded: true,
-      count: unloadedTabIds.length,
-      total: tabs.length,
-      unloadedTabs: unloadedTabs.map(t => ({
-        id: t.id,
-        title: t.title || 'Untitled',
-        url: t.url
-      }))
-    };
+  if (duration) {
+    setTimeout(() => {
+      chrome.action.setBadgeText({ text: '' });
+    }, duration);
   }
-
-  return {
-    hasUnloaded: false,
-    count: 0,
-    total: tabs.length
-  };
 }
-
-async function handleLoadUnloadedTabs(urlRegex?: string) {
-  const tabs = await getTargetTabs(urlRegex);
-  const unloadedTabIds = await getUnloadedTabs(tabs);
-
-  if (unloadedTabIds.length === 0) {
-    return {
-      success: true,
-      loadedCount: 0,
-      message: 'No unloaded tabs to load'
-    };
-  }
-
-  let loadedCount = 0;
-  const errors: string[] = [];
-
-  // Load tabs in batches to avoid overwhelming the browser
-  const batchSize = 3;
-  for (let i = 0; i < unloadedTabIds.length; i += batchSize) {
-    const batch = unloadedTabIds.slice(i, i + batchSize);
-
-    await Promise.all(batch.map(async (tabId) => {
-      try {
-        // Simply reload the tab - this will force it to load
-        await chrome.tabs.reload(tabId);
-        loadedCount++;
-      } catch (error) {
-        const tab = tabs.find(t => t.id === tabId);
-        errors.push(`Failed to load tab: ${tab?.title || tabId}`);
-      }
-    }));
-
-    // Small delay between batches to avoid overwhelming the browser
-    if (i + batchSize < unloadedTabIds.length) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-  }
-
-  // Wait a bit for tabs to fully load
-  await new Promise(resolve => setTimeout(resolve, 1500));
-
-  return {
-    success: loadedCount > 0,
-    loadedCount,
-    totalUnloaded: unloadedTabIds.length,
-    errors,
-    message: `Loaded ${loadedCount} of ${unloadedTabIds.length} suspended tabs`
-  };
-}
-
 
 async function handleAutoSort(tabId: number, tabUrl: string) {
   const injected = await injectContentScript(tabId);
 
   if (!injected) {
-    // Show error badge for protected pages
-    chrome.action.setBadgeText({ text: '⚠' });
-    chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' });
-    setTimeout(() => {
-      chrome.action.setBadgeText({ text: '' });
-    }, 3000);
+    // Show warning badge for protected pages
+    setBadge(BADGE.WARNING, TIMEOUTS.BADGE_ERROR_DISPLAY);
     return;
   }
 
@@ -229,17 +82,7 @@ async function handleAutoSort(tabId: number, tabUrl: string) {
     const settings = await getSettings();
 
     // Detect parse type based on the value
-    let parseAs: 'text' | 'number' | 'price' | 'date' = 'text';
-    if (response.value) {
-      const value = String(response.value).trim();
-      if (/^\d+(\.\d+)?$/.test(value)) {
-        parseAs = 'number';
-      } else if (/[\$£€¥]/.test(value) || /\d+[.,]\d{2}/.test(value)) {
-        parseAs = 'price';
-      } else if (/\d{4}-\d{2}-\d{2}/.test(value) || /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(value)) {
-        parseAs = 'date';
-      }
-    }
+    const parseAs = response.value ? detectParseType(String(response.value).trim()) : 'text';
 
     // Create sort key
     const sortKey: SortKey = {
@@ -265,21 +108,10 @@ async function handleAutoSort(tabId: number, tabUrl: string) {
       );
 
       // Show success badge
-      chrome.action.setBadgeText({ text: '✓' });
-      chrome.action.setBadgeBackgroundColor({ color: '#10b981' });
-
-      // Clear badge after 2 seconds
-      setTimeout(() => {
-        chrome.action.setBadgeText({ text: '' });
-      }, 2000);
+      setBadge(BADGE.SUCCESS, TIMEOUTS.BADGE_DISPLAY);
     } catch (error) {
       // Show error badge
-      chrome.action.setBadgeText({ text: '!' });
-      chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
-
-      setTimeout(() => {
-        chrome.action.setBadgeText({ text: '' });
-      }, 3000);
+      setBadge(BADGE.ERROR, TIMEOUTS.BADGE_ERROR_DISPLAY);
     }
   }
 }
@@ -288,12 +120,8 @@ async function handleConfigureSort(tabId: number, tabUrl: string) {
   const injected = await injectContentScript(tabId);
 
   if (!injected) {
-    // Show error badge for protected pages
-    chrome.action.setBadgeText({ text: '⚠' });
-    chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' });
-    setTimeout(() => {
-      chrome.action.setBadgeText({ text: '' });
-    }, 3000);
+    // Show warning badge for protected pages
+    setBadge(BADGE.WARNING, TIMEOUTS.BADGE_ERROR_DISPLAY);
     return;
   }
 
@@ -315,225 +143,16 @@ async function handleConfigureSort(tabId: number, tabUrl: string) {
       timestamp: Date.now()
     };
 
-    await chrome.storage.local.set({ contextMenuData: contextData });
+    await chrome.storage.local.set({ [STORAGE_KEYS.CONTEXT_MENU_DATA]: contextData });
 
     // Clear the context target
     await chrome.tabs.sendMessage(tabId, {
       type: 'CLEAR_CONTEXT_TARGET'
     });
 
-    // Set a badge to indicate data is ready (user needs to click extension icon)
-    chrome.action.setBadgeText({ text: '•' });
-    chrome.action.setBadgeBackgroundColor({ color: '#667eea' });
+    // Set a badge to indicate data is ready
+    setBadge(BADGE.DATA_READY);
   }
 }
 
-async function handleSortRequest(message: any): Promise<SortResult> {
-  const { urlRegex, sortKeys, keepPinnedStatic, missingValuePolicy } = message;
-
-  try {
-    const result = await performSort(
-      urlRegex,
-      sortKeys,
-      keepPinnedStatic,
-      missingValuePolicy
-    );
-    return result;
-  } catch (error) {
-    throw error;
-  }
-}
-
-async function handlePreviewRequest(message: any): Promise<SortResult> {
-  const { urlRegex, sortKeys, missingValuePolicy } = message;
-
-  try {
-    const tabs = await getTargetTabs(urlRegex);
-
-    if (tabs.length === 0) {
-      return { tabs: [], errors: [] };
-    }
-
-    const extractedValues = await extractValuesFromTabs(tabs, sortKeys[0]);
-
-    const tabsWithValues: TabWithValue[] = tabs.map(tab => {
-      const extracted = extractedValues.find(e => e.tabId === tab.id);
-      return {
-        ...tab,
-        extractedValue: extracted?.value,
-        rawText: extracted?.rawText
-      };
-    });
-
-    const validCount = tabsWithValues.filter(t => t.extractedValue !== null).length;
-
-    const comparator = createComparator(sortKeys, missingValuePolicy);
-
-    const sortedTabs = stableSort(tabsWithValues, comparator);
-
-    const errors = extractedValues
-      .filter(e => e.value === null)
-      .map(e => {
-        const tab = tabs.find(t => t.id === e.tabId);
-        return {
-          tabId: e.tabId,
-          error: e.diagnostics?.notes || 'Failed to extract value',
-          tabTitle: tab?.title,
-          tabUrl: tab?.url
-        };
-      });
-
-
-    const result = { tabs: sortedTabs, errors };
-    return result;
-  } catch (error) {
-    // Return a valid result even on error
-    return {
-      tabs: [],
-      errors: [{
-        tabId: -1,
-        error: String(error),
-        tabTitle: 'Error',
-        tabUrl: ''
-      }]
-    };
-  }
-}
-
-async function performSort(
-  urlRegex: string | undefined,
-  sortKeys: SortKey[],
-  keepPinnedStatic: boolean,
-  missingValuePolicy: 'last' | 'first' | 'error'
-): Promise<SortResult> {
-  const tabs = await getTargetTabs(urlRegex);
-
-  const extractedValues = await extractValuesFromTabs(tabs, sortKeys[0]);
-
-  const tabsWithValues: TabWithValue[] = tabs.map(tab => {
-    const extracted = extractedValues.find(e => e.tabId === tab.id);
-    return {
-      ...tab,
-      extractedValue: extracted?.value,
-      rawText: extracted?.rawText
-    };
-  });
-
-  const comparator = createComparator(sortKeys, missingValuePolicy);
-  const sortedTabs = stableSort(tabsWithValues, comparator);
-
-  await moveTabs(sortedTabs, keepPinnedStatic);
-
-  const errors = extractedValues
-    .filter(e => e.value === null)
-    .map(e => {
-      const tab = tabs.find(t => t.id === e.tabId);
-      return {
-        tabId: e.tabId,
-        error: e.diagnostics?.notes || 'Failed to extract value',
-        tabTitle: tab?.title,
-        tabUrl: tab?.url
-      };
-    });
-
-  return { tabs: sortedTabs, errors };
-}
-
-async function extractValuesFromTabs(
-  tabs: { id: number }[],
-  sortKey: SortKey
-): Promise<ExtractedValue[]> {
-
-  // Create promises for each tab with individual timeout
-  const promises = tabs.map(async (tab) => {
-    if (!sortKey.selector) {
-      return {
-        tabId: tab.id,
-        value: null,
-        error: 'No selector provided'
-      };
-    }
-
-
-    // Add timeout to individual extraction
-    const timeoutPromise = new Promise<ExtractedValue>((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 5000)
-    );
-
-    const extractionPromise = extractValueFromTab(
-      tab.id,
-      sortKey.selector,
-      sortKey.attribute,
-      sortKey.parseAs
-    );
-
-    try {
-      const result = await Promise.race([extractionPromise, timeoutPromise]);
-      return result;
-    } catch (error) {
-      const errorMessage = String(error);
-      const isTimeout = errorMessage.includes('timeout');
-
-
-      return {
-        tabId: tab.id,
-        value: null,
-        diagnostics: {
-          notes: isTimeout ? 'Extraction timed out (tab may be loading)' : `Extraction failed: ${errorMessage}`
-        }
-      };
-    }
-  });
-
-
-  try {
-    // Add global timeout for all promises (20 seconds for large numbers of tabs)
-    const allPromisesWithTimeout = Promise.race([
-      Promise.allSettled(promises),
-      new Promise<PromiseSettledResult<ExtractedValue>[]>((_, reject) =>
-        setTimeout(() => reject(new Error('Global extraction timeout')), 20000)
-      )
-    ]);
-
-    const results = await allPromisesWithTimeout;
-
-    let successCount = 0;
-    let timeoutCount = 0;
-    let errorCount = 0;
-
-    const extractedValues = results.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        const value = result.value;
-        if (value?.value !== null && value?.value !== undefined) {
-          successCount++;
-        } else if (value?.diagnostics?.notes?.includes('timeout')) {
-          timeoutCount++;
-        } else {
-          errorCount++;
-        }
-        return value;
-      } else {
-        errorCount++;
-        return {
-          tabId: tabs[index].id,
-          value: null,
-          diagnostics: {
-            notes: 'Extraction failed: ' + String(result.reason)
-          }
-        };
-      }
-    });
-
-    return extractedValues;
-  } catch (error) {
-    // Return partial results on global timeout
-    if (error instanceof Error && error.message.includes('timeout')) {
-      return tabs.map(tab => ({
-        tabId: tab.id,
-        value: null,
-        diagnostics: { notes: 'Global timeout - tab may be slow to load' }
-      }));
-    }
-    throw error;
-  }
-}
+// Context menu handlers remain in this file as they interact with UI elements directly

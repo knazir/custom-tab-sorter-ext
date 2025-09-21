@@ -1,52 +1,12 @@
-import { SortKey, TabInfo, ExtractedValue } from '../types';
+import { SortKey, TabInfo } from '../types';
+import { parseValue, ParseType } from '../utils/parsing';
 
 export type TabWithValue = TabInfo & {
   extractedValue?: any;
   rawText?: string;
 };
 
-export function parseValue(
-  value: any,
-  parseAs?: "number" | "price" | "date" | "text"
-): any {
-  if (value === null || value === undefined) return null;
-
-  const stringValue = String(value).trim();
-
-  switch (parseAs) {
-    case 'number':
-      return parseNumberValue(stringValue);
-
-    case 'price':
-      return parsePriceValue(stringValue);
-
-    case 'date':
-      return parseDateValue(stringValue);
-
-    case 'text':
-    default:
-      return stringValue.toLowerCase();
-  }
-}
-
-function parseNumberValue(text: string): number | null {
-  const match = text.match(/[\d.]+/);
-  if (!match) return null;
-  const num = parseFloat(match[0]);
-  return isNaN(num) ? null : num;
-}
-
-function parsePriceValue(text: string): number | null {
-  const cleaned = text.replace(/[^0-9.,]/g, '');
-  const normalized = cleaned.replace(',', '');
-  const num = parseFloat(normalized);
-  return isNaN(num) ? null : num;
-}
-
-function parseDateValue(text: string): Date | null {
-  const date = new Date(text);
-  return isNaN(date.getTime()) ? null : date;
-}
+// Parsing functions moved to utils/parsing.ts
 
 export function createComparator(
   sortKeys: SortKey[],

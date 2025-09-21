@@ -1,8 +1,31 @@
-import { ExtractedValue, MessageType } from '../types';
+// Content script for extracting values from DOM elements
+// Must be self-contained - no external imports for Chrome extension compatibility
 
+// Type definitions (inline for content script)
+type ParseType = "number" | "price" | "date" | "text";
 
-chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse) => {
+interface ExtractedValue {
+  tabId: number;
+  value: any;
+  rawText?: string;
+  confidence?: number;
+  diagnostics?: {
+    rule?: string;
+    parsed?: any;
+    notes?: string;
+    selector?: string;
+  };
+}
 
+interface ExtractValueMessage {
+  type: 'EXTRACT_VALUE';
+  selector: string;
+  attribute?: string;
+  parseAs?: ParseType;
+}
+
+// Message listener
+chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
   if (message.type === 'EXTRACT_VALUE') {
     const result = extractValue(
       message.selector,
@@ -19,7 +42,7 @@ chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse
 function extractValue(
   selector: string,
   attribute?: string,
-  parseAs?: string
+  parseAs?: ParseType
 ): ExtractedValue {
   try {
     // Validate selector first
@@ -28,7 +51,8 @@ function extractValue(
         tabId: -1,
         value: null,
         diagnostics: {
-          notes: 'No selector provided'
+          notes: 'No selector provided',
+          selector: ''
         }
       };
     }
@@ -42,7 +66,8 @@ function extractValue(
         tabId: -1,
         value: null,
         diagnostics: {
-          notes: `Invalid CSS selector: "${selector}"`
+          notes: `Invalid CSS selector: "${selector}"`,
+          selector
         }
       };
     }
@@ -52,7 +77,8 @@ function extractValue(
         tabId: -1,
         value: null,
         diagnostics: {
-          notes: `Element not found with selector: "${selector}"`
+          notes: `Element not found with selector: "${selector}"`,
+          selector
         }
       };
     }
@@ -74,7 +100,8 @@ function extractValue(
       confidence: 1.0,
       diagnostics: {
         rule: `Selector: ${selector}`,
-        parsed: rawText
+        parsed: rawText,
+        selector
       }
     };
   } catch (error) {
@@ -82,9 +109,9 @@ function extractValue(
       tabId: -1,
       value: null,
       diagnostics: {
-        notes: `Error extracting value: ${error}`
+        notes: `Error extracting value: ${error}`,
+        selector
       }
     };
   }
 }
-

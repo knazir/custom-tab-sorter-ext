@@ -1,4 +1,6 @@
 import { TabInfo } from '../types';
+import { logError } from '../utils/errors';
+import { PROTECTED_URL_PATTERNS } from '../config/constants';
 
 export async function getTargetTabs(
   urlRegex?: string
@@ -9,16 +11,14 @@ export async function getTargetTabs(
 
   const tabs = await chrome.tabs.query(queryOptions);
 
-  let filteredTabs = tabs.filter(tab =>
-    tab.id !== undefined &&
-    tab.url !== undefined &&
-    !tab.url.startsWith('chrome://') &&
-    !tab.url.startsWith('chrome-extension://') &&
-    !tab.url.startsWith('edge://') &&
-    !tab.url.startsWith('about:') &&
-    !tab.url.startsWith('file://') &&  // Local files may need explicit permission
-    !tab.url.includes('chrome.google.com/webstore')  // Chrome Web Store is protected
-  );
+  let filteredTabs = tabs.filter(tab => {
+    if (tab.id === undefined || tab.url === undefined) return false;
+
+    // Check against protected URL patterns
+    return !PROTECTED_URL_PATTERNS.some(pattern =>
+      tab.url!.startsWith(pattern) || tab.url!.includes(pattern)
+    );
+  });
 
   if (urlRegex) {
     try {
@@ -29,6 +29,8 @@ export async function getTargetTabs(
         return regex.test(tab.url!);
       });
     } catch (e) {
+      logError('Invalid URL regex', e);
+      // Return unfiltered tabs if regex is invalid
     }
   }
 
@@ -76,6 +78,7 @@ export async function moveTabs(
           });
           targetIndex++;
         } catch (error) {
+          logError(`Failed to move tab ${tab.id}`, error);
         }
       }
     } else {
@@ -89,6 +92,7 @@ export async function moveTabs(
           });
           targetIndex++;
         } catch (error) {
+          logError(`Failed to move tab ${tab.id}`, error);
         }
       }
     }

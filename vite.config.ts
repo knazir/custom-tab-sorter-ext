@@ -5,6 +5,15 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [react()],
   base: './',
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+      '@utils': resolve(__dirname, 'src/utils'),
+      '@config': resolve(__dirname, 'src/config'),
+      '@types': resolve(__dirname, 'src/types'),
+      '@services': resolve(__dirname, 'src/services')
+    }
+  },
   build: {
     rollupOptions: {
       input: {

@@ -1,13 +1,23 @@
+// Content script for capturing right-click context targets
+// Must be self-contained - no external imports for Chrome extension compatibility
+
+interface ContextTargetInfo {
+  selector: string;
+  value: any;
+}
+
 interface TabSorterWindow extends Window {
-  __tabSorter_lastContextTarget?: {
-    selector: string;
-    value: any;
-  };
+  __tabSorter_lastContextTarget?: ContextTargetInfo;
 }
 
 declare const window: TabSorterWindow;
 
 let lastContextElement: Element | null = null;
+
+// Constants (inline for content script)
+const MAX_SELECTOR_CLASSES = 2;
+const MAX_SELECTOR_DEPTH = 4;
+const SELECTOR_UNIQUE_ATTRIBUTES = ['data-testid', 'data-id', 'aria-label', 'name'];
 
 document.addEventListener('contextmenu', (event) => {
   const target = event.target as Element;
@@ -23,7 +33,7 @@ document.addEventListener('contextmenu', (event) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
   if (message.type === 'GET_CONTEXT_TARGET') {
     const target = window.__tabSorter_lastContextTarget;
     sendResponse(target || null);
@@ -63,7 +73,7 @@ function generateSelector(element: Element): string {
     const classes = Array.from(current.classList)
       .filter(cls => !cls.includes(':') && /^[a-zA-Z]/.test(cls))
       .map(cls => CSS.escape(cls))
-      .slice(0, 2);
+      .slice(0, MAX_SELECTOR_CLASSES);
 
     if (classes.length > 0) {
       selector += '.' + classes.join('.');
@@ -85,7 +95,7 @@ function generateSelector(element: Element): string {
 
     parts.unshift(selector);
 
-    if (parts.length >= 4) {
+    if (parts.length >= MAX_SELECTOR_DEPTH) {
       break;
     }
 
@@ -100,9 +110,11 @@ function generateSelector(element: Element): string {
       return generatedSelector;
     }
   } catch (e) {
+    // Selector might be invalid, continue with fallback
   }
 
-  const uniqueAttributes = ['data-testid', 'data-id', 'aria-label', 'name'];
+  // Try unique attributes
+  const uniqueAttributes = SELECTOR_UNIQUE_ATTRIBUTES;
   for (const attr of uniqueAttributes) {
     const value = element.getAttribute(attr);
     if (value) {

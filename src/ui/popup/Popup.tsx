@@ -1,24 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Settings, SortKey, SortResult } from '../../types';
 import { ListView } from '../components/ListView';
+import { formatParsedValue, detectParseType, ParseType } from '../../utils/parsing';
+import { STORAGE_KEYS, TIMEOUTS, DEFAULTS } from '../../config/constants';
 import './popup.css';
 
 interface PopupState {
   urlRegex: string;
   selector: string;
-  parseAs: 'text' | 'number' | 'price' | 'date';
+  parseAs: ParseType;
   direction: 'asc' | 'desc';
 }
-
-const POPUP_STATE_KEY = 'popupFormState';
-const PREVIEW_RESULT_KEY = 'previewResult';
 
 export function Popup() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [urlRegex, setUrlRegex] = useState('');
   const [selector, setSelector] = useState('');
-  const [parseAs, setParseAs] = useState<'text' | 'number' | 'price' | 'date'>('text');
-  const [direction, setDirection] = useState<'asc' | 'desc'>('asc');
+  const [parseAs, setParseAs] = useState<ParseType>(DEFAULTS.PARSE_TYPE);
+  const [direction, setDirection] = useState<'asc' | 'desc'>(DEFAULTS.SORT_DIRECTION);
   const [previewResult, setPreviewResult] = useState<SortResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [unloadedWarning, setUnloadedWarning] = useState<string | null>(null);
@@ -40,7 +39,7 @@ export function Popup() {
       parseAs,
       direction
     };
-    await chrome.storage.local.set({ [POPUP_STATE_KEY]: state });
+    await chrome.storage.local.set({ [STORAGE_KEYS.POPUP_FORM_STATE]: state });
   }, [urlRegex, selector, parseAs, direction]);
 
   // Load saved state on mount
@@ -52,7 +51,7 @@ export function Popup() {
     // Delay context menu check to allow other state to settle
     setTimeout(() => {
       checkForContextMenuData();
-    }, 100);
+    }, TIMEOUTS.CONTEXT_MENU_CHECK_DELAY);
   }, []);
 
   // Apply theme to document
@@ -83,9 +82,9 @@ export function Popup() {
   }
 
   async function loadPopupState() {
-    const stored = await chrome.storage.local.get(POPUP_STATE_KEY);
-    if (stored[POPUP_STATE_KEY]) {
-      const state = stored[POPUP_STATE_KEY] as PopupState;
+    const stored = await chrome.storage.local.get(STORAGE_KEYS.POPUP_FORM_STATE);
+    if (stored[STORAGE_KEYS.POPUP_FORM_STATE]) {
+      const state = stored[STORAGE_KEYS.POPUP_FORM_STATE] as PopupState;
       setUrlRegex(state.urlRegex);
       setSelector(state.selector);
       setParseAs(state.parseAs);
@@ -94,17 +93,17 @@ export function Popup() {
   }
 
   async function loadPreviewResult() {
-    const stored = await chrome.storage.local.get(PREVIEW_RESULT_KEY);
-    if (stored[PREVIEW_RESULT_KEY]) {
-      setPreviewResult(stored[PREVIEW_RESULT_KEY] as SortResult);
+    const stored = await chrome.storage.local.get(STORAGE_KEYS.PREVIEW_RESULT);
+    if (stored[STORAGE_KEYS.PREVIEW_RESULT]) {
+      setPreviewResult(stored[STORAGE_KEYS.PREVIEW_RESULT] as SortResult);
     }
   }
 
   async function savePreviewResult(result: SortResult | null) {
     if (result) {
-      await chrome.storage.local.set({ [PREVIEW_RESULT_KEY]: result });
+      await chrome.storage.local.set({ [STORAGE_KEYS.PREVIEW_RESULT]: result });
     } else {
-      await chrome.storage.local.remove(PREVIEW_RESULT_KEY);
+      await chrome.storage.local.remove(STORAGE_KEYS.PREVIEW_RESULT);
     }
   }
 
@@ -118,24 +117,8 @@ export function Popup() {
 
       // Try to guess the parse type based on the value
       if (response.value) {
-        const value = String(response.value).trim();
-
-        // Check if it looks like a number
-        if (/^\d+(\.\d+)?$/.test(value)) {
-          setParseAs('number');
-        }
-        // Check if it looks like a price
-        else if (/[\$£€¥]/.test(value) || /\d+[.,]\d{2}/.test(value)) {
-          setParseAs('price');
-        }
-        // Check if it might be a date
-        else if (/\d{4}-\d{2}-\d{2}/.test(value) || /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(value)) {
-          setParseAs('date');
-        }
-        // Default to text
-        else {
-          setParseAs('text');
-        }
+        const detectedType = detectParseType(String(response.value).trim());
+        setParseAs(detectedType);
       }
 
       // Clear the context data after using it
@@ -162,7 +145,7 @@ export function Popup() {
     setPreviewLoading(true);
 
     // Force a small delay to ensure UI updates
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise(resolve => setTimeout(resolve, TIMEOUTS.UI_UPDATE_DELAY));
 
     try {
       const sortKey: SortKey = {
@@ -225,7 +208,7 @@ export function Popup() {
 
       if (response) {
         // Clear preview after successful apply (tabs are now sorted)
-        await chrome.storage.local.remove(PREVIEW_RESULT_KEY);
+        await chrome.storage.local.remove(STORAGE_KEYS.PREVIEW_RESULT);
         window.close();
       } else {
         setError('Failed to apply sort');
@@ -305,28 +288,8 @@ export function Popup() {
     }
   }
 
-  function parseValue(value: any, type: string): string {
-    if (value === null || value === undefined) return 'null';
-
-    const stringValue = String(value).trim();
-
-    switch (type) {
-      case 'number':
-        const numMatch = stringValue.match(/[\d.]+/);
-        return numMatch ? numMatch[0] : 'NaN';
-
-      case 'price':
-        const cleaned = stringValue.replace(/[^0-9.,]/g, '').replace(',', '');
-        const price = parseFloat(cleaned);
-        return isNaN(price) ? 'NaN' : price.toFixed(2);
-
-      case 'date':
-        const date = new Date(stringValue);
-        return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleDateString();
-
-      default:
-        return stringValue.toLowerCase();
-    }
+  function parseValue(value: any, type: ParseType): string {
+    return formatParsedValue(value, type);
   }
 
   async function handleLoadUnloadedTabs() {
@@ -365,7 +328,7 @@ export function Popup() {
     setUnloadedWarning(null);
     setUnloadedTabCount(0);
     // Clear saved state and preview
-    await chrome.storage.local.remove([POPUP_STATE_KEY, PREVIEW_RESULT_KEY]);
+    await chrome.storage.local.remove([STORAGE_KEYS.POPUP_FORM_STATE, STORAGE_KEYS.PREVIEW_RESULT]);
   }
 
   if (!settings) {
@@ -461,7 +424,7 @@ export function Popup() {
             Parse as:
             <select
               value={parseAs}
-              onChange={(e) => setParseAs(e.target.value as typeof parseAs)}
+              onChange={(e) => setParseAs(e.target.value as ParseType)}
               className="form-select"
             >
               <option value="text">Text</option>

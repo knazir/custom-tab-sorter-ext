@@ -1,10 +1,12 @@
+import { ParseType } from './utils/parsing';
+
 export type SiteProfile = {
   id: string;
   label: string;
   domainPattern: string;
   selector: string;
   attribute?: string;
-  parseAs?: "number" | "price" | "date" | "text";
+  parseAs?: ParseType;
 };
 
 export type SortKey = {
@@ -12,7 +14,7 @@ export type SortKey = {
   label: string;
   selector?: string;
   attribute?: string;
-  parseAs?: "number" | "price" | "date" | "text";
+  parseAs?: ParseType;
   direction: "asc" | "desc";
   comparatorJS?: string;
 };
@@ -34,6 +36,7 @@ export type ExtractedValue = {
     rule?: string;
     parsed?: any;
     notes?: string;
+    selector?: string;
   };
 };
 
@@ -49,21 +52,15 @@ export type TabInfo = {
 };
 
 export type SortResult = {
-  tabs: Array<TabInfo & { extractedValue?: any }>;
+  tabs: Array<TabInfo & { extractedValue?: any; rawText?: string }>;
   errors: Array<{
     tabId: number;
     error: string;
+    code?: string;
     tabTitle?: string;
     tabUrl?: string;
   }>;
 };
 
-export type MessageType =
-  | { type: "EXTRACT_VALUE"; selector: string; attribute?: string; parseAs?: string }
-  | { type: "GET_CONTEXT_TARGET" }
-  | { type: "CLEAR_CONTEXT_TARGET" };
-
-export type MessageResponse =
-  | ExtractedValue
-  | { selector: string; value: any }
-  | null;
+// Message types moved to ./types/messages.ts for better organization
+export * from './types/messages';
